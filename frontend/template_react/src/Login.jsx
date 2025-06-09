@@ -29,7 +29,7 @@ function Login() {
         setError('');
         
         try {
-            const response = await axios.post('http://localhost:8000/api/login/', formData);
+            const response = await axios.post('api/login/', formData);
             login(response.data.tokens, response.data.user);
             
             if (from !== "/") {

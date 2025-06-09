@@ -25,7 +25,7 @@ function DoctorDashboard() { // Renamed component
         setError('');
         try {
             // UPDATED API endpoint
-            const response = await axios.get('http://localhost:8000/api/doctor/dashboard/'); 
+            const response = await axios.get('/api/doctor/dashboard/'); 
             setAllUsers(response.data.users); // Assuming backend sends 'users'
         } catch (err) {
             console.error("Failed to fetch users:", err.response || err);

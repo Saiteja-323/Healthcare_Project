@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
     const fetchProfile = async () => {
         setLoading(true); // Ensure loading is true when fetching
         try {
-            const response = await axios.get('http://localhost:8000/api/profile/');
+            const response = await axios.get('/api/profile/');
             setUser(response.data.user);
         } catch (error) {
             console.error('Failed to fetch profile:', error);

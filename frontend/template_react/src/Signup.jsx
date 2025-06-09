@@ -41,7 +41,7 @@ function Signup() {
         // delete submissionData.department; // Not needed if not in initial state
 
         try {
-            const response = await axios.post('http://localhost:8000/api/register/', submissionData);
+            const response = await axios.post('/api/register/', submissionData);
             login(response.data.tokens, response.data.user);
             
             if (response.data.user.role === 'doctor') { // UPDATED role
