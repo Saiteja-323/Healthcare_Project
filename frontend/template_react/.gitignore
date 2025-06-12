@@ -1,24 +1,12 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Django
+__pycache__/
+*.pyc
+backend/venv/
+backend/db.sqlite3
+backend/.env*
+backend/staticfiles/
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# React
+frontend/template_react/node_modules/
+frontend/template_react/dist/
+frontend/template_react/.env.local
