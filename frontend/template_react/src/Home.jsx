@@ -13,25 +13,32 @@ function Home() {
 
     return (
         <div style={{ padding: '20px', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
-            <h1>Welcome to Health Management System</h1> {/* UPDATED Title */}
+            <h1>Welcome to Health Management System</h1>
             
             {user ? (
                 <div>
                     <p>Hello, {user.first_name || user.username}! (Role: {user.role})</p>
-                    {user.role === 'doctor' && ( // UPDATED role
-                        <Link to="/doctor/dashboard"> {/* UPDATED path */}
-                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer' }}>
-                                Doctor Dashboard
+                    
+                    {/* This is the section for a logged-in doctor */}
+                    {user.role === 'doctor' && (
+                        <Link to="/doctor/dashboard">
+                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                {/* --- CHANGE IS HERE --- */}
+                                Patient's Dashboard 
                             </button>
                         </Link>
                     )}
-                    {user.role === 'patient' && ( // UPDATED role
-                        <Link to="/patient/dashboard"> {/* UPDATED path */}
-                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer' }}>
-                                Patient Dashboard
+
+                    {/* This is the section for a logged-in patient */}
+                    {user.role === 'patient' && (
+                        <Link to="/patient/dashboard">
+                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
+                                {/* This button was already correct, it links to the patient's own home */}
+                                Doctor's Dashboard
                             </button>
                         </Link>
                     )}
+
                     <button 
                         onClick={handleLogout}
                         style={{ margin: '10px', padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
