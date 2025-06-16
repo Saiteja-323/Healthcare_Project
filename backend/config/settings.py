@@ -1,5 +1,6 @@
 # backend/config/settings.py
-
+from dotenv import load_dotenv
+load_dotenv()
 from pathlib import Path
 from datetime import timedelta
 import os  # Added for environment variables

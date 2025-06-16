@@ -1,12 +1,19 @@
-# Django
+# Python
+backend/venv/
 __pycache__/
 *.pyc
-backend/venv/
-backend/db.sqlite3
-backend/.env*
-backend/staticfiles/
+*.pyo
+*.pyd
+*.db
 
-# React
+# Environment files
+*.env
+
+# Node
 frontend/template_react/node_modules/
-frontend/template_react/dist/
-frontend/template_react/.env.local
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
