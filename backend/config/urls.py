@@ -5,7 +5,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from employee_api.views import (
     RegisterView, LoginView, ProfileView,
     PatientProfileView, DoctorProfileView,
-    DoctorListView, AppointmentView, AppointmentDetailView
+    DoctorListView, AppointmentView, AppointmentDetailView,
+    AppointmentAvailabilityView  # <-- IMPORT NEW VIEW
 )
 
 urlpatterns = [
@@ -25,4 +26,7 @@ urlpatterns = [
     path('api/doctors/', DoctorListView.as_view(), name='doctor-list'),
     path('api/appointments/', AppointmentView.as_view(), name='appointment-list-create'),
     path('api/appointments/<int:pk>/', AppointmentDetailView.as_view(), name='appointment-detail-update'),
+    
+    # --- NEW URL ---
+    path('api/appointments/availability/', AppointmentAvailabilityView.as_view(), name='appointment-availability'),
 ]

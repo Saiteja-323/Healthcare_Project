@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { format } from 'date-fns'; // Import date-fns
 
 function DoctorDashboard() {
     const { user, logout } = useAuth();
@@ -13,7 +14,6 @@ function DoctorDashboard() {
 
     useEffect(() => {
         if (user) {
-            // Redirect if profile is not complete
             if (!user.doctor_profile) {
                 navigate('/doctor/complete-profile');
                 return;
@@ -26,7 +26,6 @@ function DoctorDashboard() {
         setLoading(true);
         setError('');
         try {
-            // The backend API is smart enough to return only this doctor's appointments
             const response = await axios.get('/api/appointments/');
             setAppointments(response.data);
         } catch (err) {
@@ -40,11 +39,9 @@ function DoctorDashboard() {
     const handleMarkAsCompleted = async (appointmentId) => {
         try {
             await axios.patch(`/api/appointments/${appointmentId}/`, { status: 'completed' });
-            // Refresh the list to remove the completed appointment
             fetchAppointments();
         } catch (err) {
             alert('Failed to update appointment.');
-            console.error(err);
         }
     };
 
@@ -70,11 +67,14 @@ function DoctorDashboard() {
             <h2>Your Active Appointments</h2>
             {error && <p style={{ color: 'red' }}>{error}</p>}
             
+            {/* --- UPDATED TABLE --- */}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
                 <thead>
                     <tr style={{ backgroundColor: '#f8f9fa' }}>
                         <th style={{ border: '1px solid #ddd', padding: '12px' }}>Patient Name</th>
                         <th style={{ border: '1px solid #ddd', padding: '12px' }}>Symptoms/Issue</th>
+                        <th style={{ border: '1px solid #ddd', padding: '12px' }}>Appointment Date</th>
+                        <th style={{ border: '1px solid #ddd', padding: '12px' }}>Time Slot</th>
                         <th style={{ border: '1px solid #ddd', padding: '12px' }}>Medical History</th>
                         <th style={{ border: '1px solid #ddd', padding: '12px' }}>Action</th>
                     </tr>
@@ -84,6 +84,12 @@ function DoctorDashboard() {
                         <tr key={apt.id}>
                             <td style={{ border: '1px solid #ddd', padding: '10px' }}>{apt.patient.first_name} {apt.patient.last_name}</td>
                             <td style={{ border: '1px solid #ddd', padding: '10px' }}>{apt.patient.patient_profile.current_symptoms}</td>
+                            <td style={{ border: '1px solid #ddd', padding: '10px' }}>
+                                {format(new Date(apt.appointment_date), 'EEE, MMM dd, yyyy')}
+                            </td>
+                            <td style={{ border: '1px solid #ddd', padding: '10px' }}>
+                                {apt.time_slot.replace('-', ' to ')}
+                            </td>
                             <td style={{ border: '1px solid #ddd', padding: '10px' }}>{apt.patient.patient_profile.medical_history || 'N/A'}</td>
                             <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
                                 <button onClick={() => handleMarkAsCompleted(apt.id)} style={{ backgroundColor: '#28a745', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px' }}>
@@ -93,7 +99,7 @@ function DoctorDashboard() {
                         </tr>
                     )) : (
                         <tr>
-                            <td colSpan="4" style={{ textAlign: 'center', padding: '20px' }}>You have no active appointments.</td>
+                            <td colSpan="6" style={{ textAlign: 'center', padding: '20px' }}>You have no active appointments.</td>
                         </tr>
                     )}
                 </tbody>

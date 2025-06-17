@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { format } from 'date-fns';
+import AppointmentModal from './AppointmentModal'; // <-- IMPORT THE MODAL
 
 const healthCategories = {
     heart: 'Cardiology (Heart)',
@@ -11,13 +13,22 @@ const healthCategories = {
     respiratory: 'Pulmonology (Respiratory)',
 };
 
+// Convert object to array for dropdown mapping
+const categoryOptions = Object.entries(healthCategories).map(([value, label]) => ({ value, label }));
+
 function PatientDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    
+    // --- NEW STATE MANAGEMENT ---
+    const [selectedCategory, setSelectedCategory] = useState('');
     const [doctors, setDoctors] = useState([]);
     const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedDoctor, setSelectedDoctor] = useState(null);
 
     useEffect(() => {
         if (user) {
@@ -25,43 +36,58 @@ function PatientDashboard() {
                 navigate('/patient/complete-profile');
                 return;
             }
-            fetchData();
+            // Initialize selected category from user's profile
+            setSelectedCategory(user.patient_profile.health_issue_category);
+            fetchAppointments(); // Fetch appointments on initial load
         }
     }, [user, navigate]);
 
-    const fetchData = async () => {
+    // --- EFFECT TO FETCH DOCTORS WHEN CATEGORY CHANGES ---
+    useEffect(() => {
+        if (selectedCategory) {
+            fetchDoctors();
+        }
+    }, [selectedCategory]);
+
+    const fetchDoctors = async () => {
         setLoading(true);
         setError('');
         try {
-            const doctorsRes = await axios.get(`/api/doctors/?category=${user.patient_profile.health_issue_category}`);
-            setDoctors(doctorsRes.data);
-
-            const appointmentsRes = await axios.get('/api/appointments/');
-            setAppointments(appointmentsRes.data);
+            const res = await axios.get(`/api/doctors/?category=${selectedCategory}`);
+            setDoctors(res.data);
         } catch (err) {
-            setError('Failed to load dashboard data.');
+            setError('Failed to load doctors for the selected category.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleMakeAppointment = async (doctorId) => {
+    const fetchAppointments = async () => {
         try {
-            await axios.post('/api/appointments/', { doctor_id: doctorId });
-            alert('Appointment successfully booked!');
-            fetchData();
+            const res = await axios.get('/api/appointments/');
+            setAppointments(res.data);
         } catch (err) {
-            alert('Failed to book appointment. You may already have an open appointment.');
+            setError(prev => `${prev} Failed to load appointments.`);
         }
     };
+    
+    // --- COMBINED REFRESH FUNCTION ---
+    const refreshDashboard = () => {
+        fetchDoctors();
+        fetchAppointments();
+    };
 
-    // --- NEW FUNCTION TO HANDLE APPOINTMENT REMOVAL ---
+    const handleOpenAppointmentModal = (doctor) => {
+        setSelectedDoctor(doctor);
+        setIsModalOpen(true);
+    };
+
     const handleRemoveAppointment = async (appointmentId) => {
         if (window.confirm('Are you sure you want to remove this appointment?')) {
             try {
                 await axios.delete(`/api/appointments/${appointmentId}/`);
                 alert('Appointment removed successfully.');
-                fetchData(); // Refresh the list
+                fetchAppointments(); // Refresh just the appointments list
             } catch (err) {
                 const errorMessage = err.response?.data?.error || 'Failed to remove appointment.';
                 alert(errorMessage);
@@ -74,12 +100,25 @@ function PatientDashboard() {
         navigate('/login');
     };
 
-    if (loading || !user || !user.patient_profile) {
+    if (loading && !doctors.length) {
         return <div>Loading Patient Dashboard...</div>;
+    }
+    
+    if (!user || !user.patient_profile) {
+        return <div>Redirecting...</div>
     }
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+             {/* --- MODAL RENDER --- */}
+            {isModalOpen && (
+                <AppointmentModal
+                    doctor={selectedDoctor}
+                    onClose={() => setIsModalOpen(false)}
+                    onSuccess={refreshDashboard}
+                />
+            )}
+
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
                 <h1>Patient Home</h1>
                 <div>
@@ -92,11 +131,23 @@ function PatientDashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginTop: '20px' }}>
                 <section>
-                    {/* Doctor Dashboard Section - No changes here */}
                     <h2>Doctor's Dashboard</h2>
-                    <p>Showing doctors for: <strong>{healthCategories[user.patient_profile.health_issue_category]}</strong></p>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
-                        {/* Table head and body for doctors remains the same */}
+                    {/* --- DYNAMIC DROPDOWN --- */}
+                    <div style={{ marginBottom: '15px' }}>
+                        <label htmlFor="category-select" style={{ marginRight: '10px', fontWeight: 'bold' }}>Showing doctors for:</label>
+                        <select
+                            id="category-select"
+                            value={selectedCategory}
+                            onChange={(e) => setSelectedCategory(e.target.value)}
+                            style={{ padding: '8px', fontSize: '16px' }}
+                        >
+                            {categoryOptions.map(cat => (
+                                <option key={cat.value} value={cat.value}>{cat.label}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ backgroundColor: '#f8f9fa' }}>
                                 <th style={{ border: '1px solid #ddd', padding: '10px' }}>Name</th>
@@ -112,20 +163,19 @@ function PatientDashboard() {
                                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{doc.doctor_profile.years_of_experience} years</td>
                                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{doc.doctor_profile.educational_background}</td>
                                     <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
-                                        <button onClick={() => handleMakeAppointment(doc.id)} style={{ backgroundColor: '#007bff', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
+                                        <button onClick={() => handleOpenAppointmentModal(doc)} style={{ backgroundColor: '#007bff', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
                                             Make Appointment
                                         </button>
                                     </td>
                                 </tr>
                             )) : (
-                                <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center' }}>No doctors found for your category.</td></tr>
+                                <tr><td colSpan="4" style={{ padding: '20px', textAlign: 'center' }}>{loading ? 'Loading...' : 'No doctors found for this category.'}</td></tr>
                             )}
                         </tbody>
                     </table>
                 </section>
 
                 <aside style={{ borderLeft: '1px solid #eee', paddingLeft: '30px' }}>
-                    {/* Appointments Section - UPDATED */}
                     <h2>My Appointments</h2>
                     {appointments.length > 0 ? (
                         <ul style={{ listStyle: 'none', padding: 0 }}>
@@ -134,12 +184,14 @@ function PatientDashboard() {
                                     <div>
                                         <strong>Dr. {apt.doctor.first_name} {apt.doctor.last_name}</strong>
                                         <br />
-                                        <small>Booked: {new Date(apt.created_at).toLocaleDateString()}</small>
+                                        {/* --- DISPLAY DATE AND TIME --- */}
+                                        <small>Date: {format(new Date(apt.appointment_date), 'EEE, MMM dd, yyyy')}</small>
+                                        <br/>
+                                        <small>Time: {apt.time_slot.replace('-', ' to ')}</small>
                                         <p style={{ margin: '5px 0 0', fontWeight: 'bold', color: apt.status === 'completed' ? 'green' : 'orange' }}>
                                             Status: {apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
                                         </p>
                                     </div>
-                                    {/* --- ADDED REMOVE BUTTON CONDITIONALLY --- */}
                                     {apt.status === 'booked' && (
                                         <button onClick={() => handleRemoveAppointment(apt.id)} style={{ backgroundColor: '#dc3545', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', height: 'fit-content' }}>
                                             Remove

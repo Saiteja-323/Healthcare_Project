@@ -3,8 +3,6 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import CustomUser, PatientProfile, DoctorProfile, Appointment
 
-# --- NEW SERIALIZERS ---
-
 class PatientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientProfile
@@ -15,8 +13,6 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
         model = DoctorProfile
         fields = ['specialization', 'years_of_experience', 'educational_background', 'credentials']
 
-# --- UPDATED/EXISTING SERIALIZERS ---
-
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
@@ -25,7 +21,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['username', 'email', 'password', 'password_confirm',
-                'first_name', 'last_name', 'role']
+                  'first_name', 'last_name', 'role']
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
@@ -38,14 +34,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
 class UserSerializer(serializers.ModelSerializer):
-    # Nest profile serializers to include profile data with user data
     patient_profile = PatientProfileSerializer(read_only=True)
     doctor_profile = DoctorProfileSerializer(read_only=True)
 
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role',
-                'is_staff', 'is_active', 'patient_profile', 'doctor_profile']
+                  'is_staff', 'is_active', 'patient_profile', 'doctor_profile']
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
@@ -55,25 +50,49 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         return super().validate(attrs)
 
-# --- NEW SERIALIZERS for Appointments and Doctor Listing ---
-
 class DoctorListSerializer(serializers.ModelSerializer):
-    """Serializer specifically for listing doctors for patients."""
     doctor_profile = DoctorProfileSerializer(read_only=True)
     
     class Meta:
         model = CustomUser
         fields = ['id', 'first_name', 'last_name', 'doctor_profile']
 
+# --- THIS IS THE CORRECTED SERIALIZER ---
 class AppointmentSerializer(serializers.ModelSerializer):
-    # Use UserSerializer to show details about the patient and doctor
     patient = UserSerializer(read_only=True)
     doctor = UserSerializer(read_only=True)
     doctor_id = serializers.IntegerField(write_only=True)
 
     class Meta:
         model = Appointment
-        fields = ['id', 'patient', 'doctor', 'doctor_id', 'created_at', 'status']
+        fields = [
+            'id', 'patient', 'doctor', 'doctor_id', 
+            'appointment_date', 'time_slot', 
+            'created_at', 'status'
+        ]
+        # We remove the automatic unique_together validator because we'll do it manually.
+        # This prevents the server crash.
+        validators = []
+
+    def validate(self, attrs):
+        """
+        Perform manual validation for the unique_together constraint.
+        """
+        patient_user = self.context['request'].user
+        doctor_id = attrs['doctor_id']
+        appointment_date = attrs['appointment_date']
+        time_slot = attrs['time_slot']
+
+        # Check if an appointment with these details already exists
+        if Appointment.objects.filter(
+            patient=patient_user,
+            doctor_id=doctor_id,
+            appointment_date=appointment_date,
+            time_slot=time_slot
+        ).exists():
+            raise serializers.ValidationError("You have already booked this exact time slot. Please check your appointments.")
+        
+        return attrs
     
     def create(self, validated_data):
         patient_user = self.context['request'].user
