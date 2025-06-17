@@ -6,8 +6,10 @@ backend/db.sqlite3
 backend/.env
 
 # Frontend / Node
-frontend/template_react/node_modules/
-frontend/template_react/dist/
+# --- PATHS UPDATED HERE ---
+frontend/node_modules/
+frontend/dist/
+# --- END OF UPDATED PATHS ---
 .DS_Store
 
 # IDE files
