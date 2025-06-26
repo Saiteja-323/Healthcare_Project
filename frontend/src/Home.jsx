@@ -1,4 +1,4 @@
-// src/Home.jsx
+// frontend/src/Home.jsx
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 
@@ -18,27 +18,20 @@ function Home() {
             {user ? (
                 <div>
                     <p>Hello, {user.first_name || user.username}! (Role: {user.role})</p>
-                    
-                    {/* This is the section for a logged-in doctor */}
                     {user.role === 'doctor' && (
                         <Link to="/doctor/dashboard">
-                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
-                                {/* --- CHANGE IS HERE --- */}
-                                Patient's Dashboard 
+                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer' }}>
+                                Doctor Dashboard
                             </button>
                         </Link>
                     )}
-
-                    {/* This is the section for a logged-in patient */}
                     {user.role === 'patient' && (
                         <Link to="/patient/dashboard">
-                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
-                                {/* This button was already correct, it links to the patient's own home */}
-                                Doctor's Dashboard
+                            <button style={{ margin: '10px', padding: '10px 20px', cursor: 'pointer' }}>
+                                Patient Dashboard
                             </button>
                         </Link>
                     )}
-
                     <button 
                         onClick={handleLogout}
                         style={{ margin: '10px', padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}

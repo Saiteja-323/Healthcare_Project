@@ -5,22 +5,14 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# ... (all existing settings are correct) ...
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# Quick-start development settings - unsuitable for production
-# Get SECRET_KEY from environment variables
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
-
-# Get DEBUG status from environment variables
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1', 't')
-
-# Get ALLOWED_HOSTS from environment variables
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
-
-# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -65,8 +57,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Database (PostgreSQL Configuration)
-# https://docs.djangoproject.com/en/stable/ref/settings/#databases
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -78,7 +68,6 @@ DATABASES = {
     }
 }
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -86,30 +75,28 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# --- UPDATED STATIC AND MEDIA SETTINGS ---
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# --- END OF UPDATE ---
 
-# Custom User Model
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'employee_api.CustomUser'
 
-# CORS Settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://localhost:5173", # Default Vite dev server port
+    "http://localhost:5173",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -119,7 +106,6 @@ REST_FRAMEWORK = {
     ],
 }
 
-# JWT Settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),

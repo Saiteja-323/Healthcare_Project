@@ -1,10 +1,10 @@
 // src/PatientDashboard.jsx
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { format } from 'date-fns';
-import AppointmentModal from './AppointmentModal'; // <-- IMPORT THE MODAL
+import AppointmentModal from './AppointmentModal';
 
 const healthCategories = {
     heart: 'Cardiology (Heart)',
@@ -13,14 +13,12 @@ const healthCategories = {
     respiratory: 'Pulmonology (Respiratory)',
 };
 
-// Convert object to array for dropdown mapping
 const categoryOptions = Object.entries(healthCategories).map(([value, label]) => ({ value, label }));
 
 function PatientDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     
-    // --- NEW STATE MANAGEMENT ---
     const [selectedCategory, setSelectedCategory] = useState('');
     const [doctors, setDoctors] = useState([]);
     const [appointments, setAppointments] = useState([]);
@@ -29,6 +27,7 @@ function PatientDashboard() {
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedDoctor, setSelectedDoctor] = useState(null);
+    const [restrictedDates, setRestrictedDates] = useState({});
 
     useEffect(() => {
         if (user) {
@@ -36,13 +35,11 @@ function PatientDashboard() {
                 navigate('/patient/complete-profile');
                 return;
             }
-            // Initialize selected category from user's profile
             setSelectedCategory(user.patient_profile.health_issue_category);
-            fetchAppointments(); // Fetch appointments on initial load
+            fetchAppointments(); 
         }
     }, [user, navigate]);
 
-    // --- EFFECT TO FETCH DOCTORS WHEN CATEGORY CHANGES ---
     useEffect(() => {
         if (selectedCategory) {
             fetchDoctors();
@@ -55,7 +52,7 @@ function PatientDashboard() {
         try {
             const res = await axios.get(`/api/doctors/?category=${selectedCategory}`);
             setDoctors(res.data);
-        } catch (err) {
+        } catch {
             setError('Failed to load doctors for the selected category.');
         } finally {
             setLoading(false);
@@ -65,15 +62,24 @@ function PatientDashboard() {
     const fetchAppointments = async () => {
         try {
             const res = await axios.get('/api/appointments/');
-            setAppointments(res.data);
-        } catch (err) {
+            const apts = res.data;
+            setAppointments(apts);
+
+            // Process cancelled appointments to set booking restrictions
+            const restrictions = {};
+            apts.filter(apt => apt.status === 'cancelled' && apt.suggestion_date)
+                .forEach(apt => {
+                    restrictions[apt.doctor.id] = apt.suggestion_date;
+                });
+            setRestrictedDates(restrictions);
+
+        } catch {
             setError(prev => `${prev} Failed to load appointments.`);
         }
     };
     
-    // --- COMBINED REFRESH FUNCTION ---
     const refreshDashboard = () => {
-        fetchDoctors();
+        if(selectedCategory) fetchDoctors();
         fetchAppointments();
     };
 
@@ -82,40 +88,32 @@ function PatientDashboard() {
         setIsModalOpen(true);
     };
 
-    const handleRemoveAppointment = async (appointmentId) => {
-        if (window.confirm('Are you sure you want to remove this appointment?')) {
-            try {
-                await axios.delete(`/api/appointments/${appointmentId}/`);
-                alert('Appointment removed successfully.');
-                fetchAppointments(); // Refresh just the appointments list
-            } catch (err) {
-                const errorMessage = err.response?.data?.error || 'Failed to remove appointment.';
-                alert(errorMessage);
-            }
-        }
-    };
-
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
-    if (loading && !doctors.length) {
-        return <div>Loading Patient Dashboard...</div>;
-    }
+    if (loading && !doctors.length) return <div>Loading Patient Dashboard...</div>;
+    if (!user || !user.patient_profile) return <div>Redirecting...</div>;
     
-    if (!user || !user.patient_profile) {
-        return <div>Redirecting...</div>
-    }
+    const getStatusStyle = (status) => {
+        switch(status) {
+            case 'completed': return { color: 'green', fontWeight: 'bold' };
+            case 'accepted': return { color: 'blue', fontWeight: 'bold' };
+            case 'pending': return { color: 'orange', fontWeight: 'bold' };
+            case 'cancelled': return { color: 'red', fontWeight: 'bold' };
+            default: return {};
+        }
+    };
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-             {/* --- MODAL RENDER --- */}
             {isModalOpen && (
                 <AppointmentModal
                     doctor={selectedDoctor}
                     onClose={() => setIsModalOpen(false)}
                     onSuccess={refreshDashboard}
+                    restrictedUntilDate={restrictedDates[selectedDoctor.id]}
                 />
             )}
 
@@ -123,6 +121,9 @@ function PatientDashboard() {
                 <h1>Patient Home</h1>
                 <div>
                     <span style={{ marginRight: '15px' }}>Hi, {user.first_name || user.username}!</span>
+                    <Link to="/patient/history" style={{marginRight: '15px', padding: '8px 15px', backgroundColor: '#17a2b8', color: 'white', textDecoration: 'none', borderRadius: '4px'}}>
+                        View Medical History
+                    </Link>
                     <button onClick={handleLogout} style={{ padding: '8px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>Logout</button>
                 </div>
             </header>
@@ -131,19 +132,11 @@ function PatientDashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginTop: '20px' }}>
                 <section>
-                    <h2>Doctor's Dashboard</h2>
-                    {/* --- DYNAMIC DROPDOWN --- */}
+                    <h2>Find a Doctor</h2>
                     <div style={{ marginBottom: '15px' }}>
                         <label htmlFor="category-select" style={{ marginRight: '10px', fontWeight: 'bold' }}>Showing doctors for:</label>
-                        <select
-                            id="category-select"
-                            value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
-                            style={{ padding: '8px', fontSize: '16px' }}
-                        >
-                            {categoryOptions.map(cat => (
-                                <option key={cat.value} value={cat.value}>{cat.label}</option>
-                            ))}
+                        <select id="category-select" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} style={{ padding: '8px', fontSize: '16px' }}>
+                            {categoryOptions.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
                         </select>
                     </div>
 
@@ -164,7 +157,7 @@ function PatientDashboard() {
                                     <td style={{ border: '1px solid #ddd', padding: '8px' }}>{doc.doctor_profile.educational_background}</td>
                                     <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
                                         <button onClick={() => handleOpenAppointmentModal(doc)} style={{ backgroundColor: '#007bff', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}>
-                                            Make Appointment
+                                            Book Appointment
                                         </button>
                                     </td>
                                 </tr>
@@ -180,28 +173,28 @@ function PatientDashboard() {
                     {appointments.length > 0 ? (
                         <ul style={{ listStyle: 'none', padding: 0 }}>
                             {appointments.map(apt => (
-                                <li key={apt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #ddd', padding: '10px', marginBottom: '10px', borderRadius: '4px', backgroundColor: apt.status === 'completed' ? '#e9f5e9' : '#fff' }}>
+                                <li key={apt.id} style={{ border: '1px solid #ddd', padding: '12px', marginBottom: '10px', borderRadius: '4px', backgroundColor: '#fff' }}>
                                     <div>
                                         <strong>Dr. {apt.doctor.first_name} {apt.doctor.last_name}</strong>
                                         <br />
-                                        {/* --- DISPLAY DATE AND TIME --- */}
                                         <small>Date: {format(new Date(apt.appointment_date), 'EEE, MMM dd, yyyy')}</small>
                                         <br/>
                                         <small>Time: {apt.time_slot.replace('-', ' to ')}</small>
-                                        <p style={{ margin: '5px 0 0', fontWeight: 'bold', color: apt.status === 'completed' ? 'green' : 'orange' }}>
-                                            Status: {apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
+                                        <p style={{ margin: '8px 0 0' }}>
+                                            Status: <span style={getStatusStyle(apt.status)}>{apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}</span>
                                         </p>
+                                        {apt.status === 'cancelled' && apt.suggestion_message && (
+                                            <div style={{marginTop: '5px', padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '4px'}}>
+                                                <strong style={{color: '#856404'}}>Suggestion:</strong>
+                                                <p style={{margin: '4px 0 0', fontSize: '0.9em'}}>{apt.suggestion_message}</p>
+                                            </div>
+                                        )}
                                     </div>
-                                    {apt.status === 'booked' && (
-                                        <button onClick={() => handleRemoveAppointment(apt.id)} style={{ backgroundColor: '#dc3545', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', height: 'fit-content' }}>
-                                            Remove
-                                        </button>
-                                    )}
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p>You have no appointments.</p>
+                        <p>You have no appointments scheduled.</p>
                     )}
                 </aside>
             </div>

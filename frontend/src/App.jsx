@@ -7,8 +7,9 @@ import Signup from './Signup';
 import DoctorDashboard from './DoctorDashboard';
 import PatientDashboard from './PatientDashboard';
 import ProtectedRoute from './ProtectedRoute';
-import PatientProfileForm from './PatientProfileForm'; // NEW
-import DoctorProfileForm from './DoctorProfileForm';   // NEW
+import PatientProfileForm from './PatientProfileForm';
+import DoctorProfileForm from './DoctorProfileForm';
+import MedicalHistory from './MedicalHistory'; // <-- NEW IMPORT
 
 function App() {
   return (
@@ -27,6 +28,11 @@ function App() {
           <Route 
             path="/patient/complete-profile" 
             element={<ProtectedRoute requiredRole="patient"><PatientProfileForm /></ProtectedRoute>}
+          />
+          {/* --- NEW ROUTE --- */}
+          <Route 
+            path="/patient/history"
+            element={<ProtectedRoute requiredRole="patient"><MedicalHistory /></ProtectedRoute>}
           />
 
           {/* Doctor Routes */}
