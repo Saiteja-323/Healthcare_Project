@@ -1,0 +1,22 @@
+# Set default behavior to automatically handle text files.
+* text=auto eol=lf
+
+# Explicitly declare text files you want to always have LF line endings in the repo.
+*.js text
+*.jsx text
+*.css text
+*.py text
+*.json text
+*.md text
+*.html text
+.env text
+.gitignore text
+.gitattributes text
+requirements.txt text
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
