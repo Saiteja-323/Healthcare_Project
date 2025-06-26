@@ -1,5 +1,5 @@
 // frontend/src/AppointmentModal.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -15,15 +15,18 @@ const timeSlots = [
 function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [selectedSlot, setSelectedSlot] = useState(null);
-    const [initialReport, setInitialReport] = useState(null); // <-- NEW STATE FOR FILE
+    const [initialReport, setInitialReport] = useState(null);
     const [availability, setAvailability] = useState({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const minBookingDate = restrictedUntilDate ? new Date(restrictedUntilDate) : new Date();
+    const minBookingDate = useMemo(() => {
+        const today = new Date();
+        const restricted = restrictedUntilDate ? new Date(restrictedUntilDate) : today;
+        return restricted > today ? restricted : today;
+    }, [restrictedUntilDate]);
 
     useEffect(() => {
-        // If the default selected date is in the past or restricted, reset it
         if (selectedDate < minBookingDate) {
             setSelectedDate(minBookingDate);
         }
@@ -35,7 +38,6 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
         setError('');
         try {
             const formattedDate = format(date, 'yyyy-MM-dd');
-            // The API now checks for 'accepted' appointments, which is what we want
             const response = await axios.get(`/api/appointments/availability/?doctor_id=${doctor.id}&date=${formattedDate}`);
             setAvailability(response.data);
         } catch {
@@ -74,19 +76,13 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
             onSuccess();
             onClose();
         } catch (err) {
-            if (err.response && err.response.data) {
-                const responseData = err.response.data;
-                const messages = Object.values(responseData).flat().join(' ');
-                setError(messages || 'Failed to book appointment.');
-            } else {
-                setError('Failed to book appointment. Please check your network connection.');
-            }
+            const messages = Object.values(err.response?.data || {}).flat().join(' ') || 'Failed to book appointment.';
+            setError(messages);
         } finally {
             setLoading(false);
         }
     };
     
-    // ... (handleSlotSelect and getSlotStyle are unchanged) ...
     const handleSlotSelect = (slotKey) => {
         const count = availability[slotKey] || 0;
         if (count >= 5) { alert('Slot is filled'); return; }
@@ -95,16 +91,17 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
 
     const getSlotStyle = (slotKey) => {
         const count = availability[slotKey] || 0;
-        let backgroundColor = '#4CAF50'; // Green
-        if (count >= 4) backgroundColor = '#ffc107'; // Yellow
-        if (count >= 5) backgroundColor = '#f44336'; // Red
-        return { backgroundColor, cursor: count >= 5 ? 'not-allowed' : 'pointer', border: selectedSlot === slotKey ? '3px solid #000' : 'none', };
+        let backgroundColor = '#4CAF50';
+        if (count >= 4) backgroundColor = '#ffc107';
+        if (count >= 5) backgroundColor = '#f44336';
+        return { backgroundColor, cursor: count >= 5 ? 'not-allowed' : 'pointer', border: selectedSlot === slotKey ? '3px solid #000' : 'none' };
     };
 
-
     return (
-        <div style={styles.overlay}>
-            <div style={styles.modal}>
+        // --- FIX: Added onClick to the overlay to close the modal ---
+        <div style={styles.overlay} onClick={onClose}>
+            <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        {/* --- END OF FIX --- */}
                 <button onClick={onClose} style={styles.closeButton}>×</button>
                 <h3>Book Appointment with Dr. {doctor.first_name} {doctor.last_name}</h3>
                 {error && <p style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
@@ -115,9 +112,9 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
                         <Calendar
                             onChange={handleDateChange}
                             value={selectedDate}
-                            minDate={minBookingDate} // Use the calculated min date
+                            minDate={minBookingDate}
                         />
-                        {restrictedUntilDate && <p style={{color: 'orange', fontSize: '0.9em', marginTop: '10px'}}>Booking is available from {format(minBookingDate, 'MMM dd, yyyy')}.</p>}
+                        {restrictedUntilDate && new Date(restrictedUntilDate) > new Date() && <p style={{color: 'orange', fontSize: '0.9em', marginTop: '10px'}}>Booking is available from {format(minBookingDate, 'MMM dd, yyyy')}.</p>}
                     </div>
                     <div style={styles.slotsContainer}>
                         <h4>Select a Time Slot for {format(selectedDate, 'MMM dd')}</h4>
@@ -143,7 +140,6 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
     );
 }
 
-// ... (styles object is unchanged)
 const styles = {
     overlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 },
     modal: { backgroundColor: 'white', padding: '25px', borderRadius: '8px', width: '800px', maxWidth: '90%', position: 'relative' },

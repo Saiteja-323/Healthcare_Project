@@ -1,4 +1,4 @@
-// src/PatientDashboard.jsx
+// frontend/src/PatientDashboard.jsx
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
@@ -12,8 +12,15 @@ const healthCategories = {
     bone: 'Orthopedics (Bone & Muscle)',
     respiratory: 'Pulmonology (Respiratory)',
 };
-
 const categoryOptions = Object.entries(healthCategories).map(([value, label]) => ({ value, label }));
+
+// Helper function to prevent timezone issues with dates from the backend
+const parseDateAsLocal = (dateString) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    // Adjust for timezone offset to display the date as it was intended
+    return new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
+};
 
 function PatientDashboard() {
     const { user, logout } = useAuth();
@@ -62,17 +69,13 @@ function PatientDashboard() {
     const fetchAppointments = async () => {
         try {
             const res = await axios.get('/api/appointments/');
-            const apts = res.data;
-            setAppointments(apts);
-
-            // Process cancelled appointments to set booking restrictions
+            setAppointments(res.data);
             const restrictions = {};
-            apts.filter(apt => apt.status === 'cancelled' && apt.suggestion_date)
+            res.data.filter(apt => apt.status === 'cancelled' && apt.suggestion_date)
                 .forEach(apt => {
                     restrictions[apt.doctor.id] = apt.suggestion_date;
                 });
             setRestrictedDates(restrictions);
-
         } catch {
             setError(prev => `${prev} Failed to load appointments.`);
         }
@@ -93,37 +96,38 @@ function PatientDashboard() {
         navigate('/login');
     };
 
-    if (loading && !doctors.length) return <div>Loading Patient Dashboard...</div>;
-    if (!user || !user.patient_profile) return <div>Redirecting...</div>;
-    
-    const getStatusStyle = (status) => {
-        switch(status) {
-            case 'completed': return { color: 'green', fontWeight: 'bold' };
-            case 'accepted': return { color: 'blue', fontWeight: 'bold' };
-            case 'pending': return { color: 'orange', fontWeight: 'bold' };
-            case 'cancelled': return { color: 'red', fontWeight: 'bold' };
-            default: return {};
+    const handlePatientCancel = async (appointmentId) => {
+        if (window.confirm('Are you sure you want to cancel this appointment?')) {
+            try {
+                await axios.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'cancel' });
+                alert('Appointment cancelled successfully.');
+                fetchAppointments(); // Refresh the list
+            } catch (err) {
+                alert(err.response?.data?.error || 'Failed to cancel appointment.');
+            }
         }
     };
 
+    // A more robust loading check
+    if (loading && !doctors.length && !appointments.length) return <div>Loading Patient Dashboard...</div>;
+    if (!user || !user.patient_profile) return <div>Redirecting...</div>;
+    
+    const getStatusStyle = (status) => ({
+        color: { completed: 'green', accepted: 'blue', pending: 'orange', cancelled: 'red' }[status] || 'black',
+        fontWeight: 'bold'
+    });
+    
+    const getDisplayStatus = (status) => status === 'accepted' ? 'Booked' : status.charAt(0).toUpperCase() + status.slice(1);
+
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-            {isModalOpen && (
-                <AppointmentModal
-                    doctor={selectedDoctor}
-                    onClose={() => setIsModalOpen(false)}
-                    onSuccess={refreshDashboard}
-                    restrictedUntilDate={restrictedDates[selectedDoctor.id]}
-                />
-            )}
+            {isModalOpen && <AppointmentModal doctor={selectedDoctor} onClose={() => setIsModalOpen(false)} onSuccess={refreshDashboard} restrictedUntilDate={restrictedDates[selectedDoctor.id]} />}
 
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
                 <h1>Patient Home</h1>
                 <div>
                     <span style={{ marginRight: '15px' }}>Hi, {user.first_name || user.username}!</span>
-                    <Link to="/patient/history" style={{marginRight: '15px', padding: '8px 15px', backgroundColor: '#17a2b8', color: 'white', textDecoration: 'none', borderRadius: '4px'}}>
-                        View Medical History
-                    </Link>
+                    <Link to="/patient/history" style={{marginRight: '15px', padding: '8px 15px', backgroundColor: '#17a2b8', color: 'white', textDecoration: 'none', borderRadius: '4px'}}>View Medical History</Link>
                     <button onClick={handleLogout} style={{ padding: '8px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>Logout</button>
                 </div>
             </header>
@@ -131,6 +135,7 @@ function PatientDashboard() {
             {error && <p style={{ color: 'red' }}>{error}</p>}
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginTop: '20px' }}>
+                {/* This section uses the better table layout and includes the category filter */}
                 <section>
                     <h2>Find a Doctor</h2>
                     <div style={{ marginBottom: '15px' }}>
@@ -167,22 +172,25 @@ function PatientDashboard() {
                         </tbody>
                     </table>
                 </section>
-
-                <aside style={{ borderLeft: '1px solid #eee', paddingLeft: '30px' }}>
+                
+                <aside style={{ borderLeft: '1px solid #eee', paddingLeft: '30px', maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}>
                     <h2>My Appointments</h2>
                     {appointments.length > 0 ? (
                         <ul style={{ listStyle: 'none', padding: 0 }}>
                             {appointments.map(apt => (
                                 <li key={apt.id} style={{ border: '1px solid #ddd', padding: '12px', marginBottom: '10px', borderRadius: '4px', backgroundColor: '#fff' }}>
                                     <div>
-                                        <strong>Dr. {apt.doctor.first_name} {apt.doctor.last_name}</strong>
-                                        <br />
-                                        <small>Date: {format(new Date(apt.appointment_date), 'EEE, MMM dd, yyyy')}</small>
-                                        <br/>
+                                        <strong>Dr. {apt.doctor.first_name} {apt.doctor.last_name}</strong><br />
+                                        <small>Date: {format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')}</small><br/>
                                         <small>Time: {apt.time_slot.replace('-', ' to ')}</small>
-                                        <p style={{ margin: '8px 0 0' }}>
-                                            Status: <span style={getStatusStyle(apt.status)}>{apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}</span>
-                                        </p>
+                                        <p style={{ margin: '8px 0 0' }}>Status: <span style={getStatusStyle(apt.status)}>{getDisplayStatus(apt.status)}</span></p>
+                                        
+                                        {['pending', 'accepted'].includes(apt.status) && (
+                                            <button onClick={() => handlePatientCancel(apt.id)} style={{marginTop: '8px', padding: '4px 8px', fontSize: '0.8em', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
+                                                Cancel Appointment
+                                            </button>
+                                        )}
+
                                         {apt.status === 'cancelled' && apt.suggestion_message && (
                                             <div style={{marginTop: '5px', padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '4px'}}>
                                                 <strong style={{color: '#856404'}}>Suggestion:</strong>
@@ -193,13 +201,10 @@ function PatientDashboard() {
                                 </li>
                             ))}
                         </ul>
-                    ) : (
-                        <p>You have no appointments scheduled.</p>
-                    )}
+                    ) : <p>You have no appointments scheduled.</p>}
                 </aside>
             </div>
         </div>
     );
 }
-
 export default PatientDashboard;

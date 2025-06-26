@@ -13,16 +13,14 @@ from .serializers import (
     PatientProfileSerializer, DoctorProfileSerializer, DoctorListSerializer,
     AppointmentSerializer, TreatmentFormSerializer
 )
-from .permissions import IsDoctor, IsPatient # We will create this file
+from .permissions import IsDoctor, IsPatient
 
-# ... (RegisterView, LoginView, ProfileView, Patient/DoctorProfileView, DoctorListView are unchanged) ...
-# Please scroll down to see the heavily modified and new views.
+# ... (RegisterView, LoginView, ProfileView, etc. are unchanged) ...
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
     def create(self, request, *args, **kwargs):
-        # ... same as before ...
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -33,7 +31,6 @@ class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = LoginSerializer
     def post(self, request):
-        # ... same as before ...
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             username, password, role_from_request = serializer.validated_data['username'], serializer.validated_data['password'], serializer.validated_data['role']
@@ -76,7 +73,6 @@ class DoctorListView(generics.ListAPIView):
         if not category: return CustomUser.objects.none()
         return CustomUser.objects.filter(role='doctor', doctor_profile__specialization=category)
 
-# --- MODIFIED AppointmentView ---
 class AppointmentView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -86,7 +82,6 @@ class AppointmentView(APIView):
         if user.role == 'patient':
             appointments = Appointment.objects.filter(patient=user).select_related('doctor', 'medical_record')
         elif user.role == 'doctor':
-            # Doctors see pending and accepted appointments
             appointments = Appointment.objects.filter(
                 doctor=user, 
                 status__in=['pending', 'accepted']
@@ -101,7 +96,6 @@ class AppointmentView(APIView):
         if request.user.role != 'patient':
             return Response({'error': 'Only patients can book appointments.'}, status=status.HTTP_403_FORBIDDEN)
 
-        # Pre-validation checks for full slots remain the same
         doctor_id = request.data.get('doctor_id')
         appointment_date = request.data.get('appointment_date')
         time_slot = request.data.get('time_slot')
@@ -109,7 +103,6 @@ class AppointmentView(APIView):
         if not all([doctor_id, appointment_date, time_slot]):
             return Response({'error': 'Doctor, date, and time slot are required.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check for slots that are already accepted (not just booked)
         booked_count = Appointment.objects.filter(
             doctor_id=doctor_id,
             appointment_date=appointment_date,
@@ -131,7 +124,6 @@ class AppointmentView(APIView):
             return Response({'error': 'An unexpected server error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class AppointmentAvailabilityView(APIView):
-    # ... (code is correct, but let's refine the filter) ...
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request):
         doctor_id = request.query_params.get('doctor_id')
@@ -140,7 +132,6 @@ class AppointmentAvailabilityView(APIView):
         if not doctor_id or not date:
             return Response({'error': 'Doctor ID and date are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # We only care about appointments that are confirmed/accepted
         availability = Appointment.objects.filter(
             doctor_id=doctor_id,
             appointment_date=date,
@@ -150,36 +141,60 @@ class AppointmentAvailabilityView(APIView):
         slot_counts = {slot['time_slot']: slot['count'] for slot in availability}
         return Response(slot_counts, status=status.HTTP_200_OK)
 
-# --- NEW: View for Doctor to Accept/Cancel Appointments ---
+# --- FIX: MODIFIED ManageAppointmentView to allow patient cancellations ---
 class ManageAppointmentView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [permissions.IsAuthenticated] # Remove IsDoctor, check role inside
 
     def patch(self, request, pk):
         try:
-            appointment = Appointment.objects.get(pk=pk, doctor=request.user)
+            appointment = Appointment.objects.get(pk=pk)
         except Appointment.DoesNotExist:
             return Response({'error': 'Appointment not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        user = request.user
         action = request.data.get('action')
 
-        if action == 'accept':
-            if appointment.status != 'pending':
-                return Response({'error': 'Can only accept a pending appointment.'}, status=status.HTTP_400_BAD_REQUEST)
-            appointment.status = 'accepted'
-            appointment.save()
-        elif action == 'cancel':
-            if appointment.status not in ['pending', 'accepted']:
-                return Response({'error': 'Cannot cancel this appointment.'}, status=status.HTTP_400_BAD_REQUEST)
-            appointment.status = 'cancelled'
-            appointment.suggestion_message = request.data.get('suggestion_message', '')
-            appointment.suggestion_date = request.data.get('suggestion_date', None)
-            appointment.save()
+        # Doctor's actions
+        if user.role == 'doctor':
+            if appointment.doctor != user:
+                return Response({'error': 'You do not have permission to manage this appointment.'}, status=status.HTTP_403_FORBIDDEN)
+            
+            if action == 'accept':
+                if appointment.status != 'pending':
+                    return Response({'error': 'Can only accept a pending appointment.'}, status=status.HTTP_400_BAD_REQUEST)
+                appointment.status = 'accepted'
+                appointment.save()
+            elif action == 'cancel':
+                if appointment.status not in ['pending', 'accepted']:
+                    return Response({'error': 'Cannot cancel this appointment.'}, status=status.HTTP_400_BAD_REQUEST)
+                appointment.status = 'cancelled'
+                appointment.suggestion_message = request.data.get('suggestion_message', '')
+                appointment.suggestion_date = request.data.get('suggestion_date', None)
+                appointment.save()
+            else:
+                return Response({'error': 'Invalid action for a doctor.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Patient's actions
+        elif user.role == 'patient':
+            if appointment.patient != user:
+                return Response({'error': 'You do not have permission to manage this appointment.'}, status=status.HTTP_403_FORBIDDEN)
+
+            if action == 'cancel':
+                if appointment.status not in ['pending', 'accepted']:
+                    return Response({'error': 'Cannot cancel this appointment. It might be completed or already cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
+                appointment.status = 'cancelled'
+                # Patients don't add suggestion messages
+                appointment.save()
+            else:
+                return Response({'error': 'Invalid action for a patient.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         else:
-            return Response({'error': 'Invalid action.'}, status=status.HTTP_400_BAD_REQUEST)
+             return Response({'error': 'Invalid user role.'}, status=status.HTTP_403_FORBIDDEN)
 
         return Response(AppointmentSerializer(appointment).data, status=status.HTTP_200_OK)
+# --- END OF FIX ---
 
-# --- NEW: View for Doctor to Submit Treatment and Complete Appointment ---
+
 class CompleteAppointmentView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     parser_classes = [MultiPartParser, FormParser]
@@ -192,28 +207,34 @@ class CompleteAppointmentView(APIView):
         
         serializer = TreatmentFormSerializer(data=request.data)
         if serializer.is_valid():
-            # Create the medical record
             MedicalRecord.objects.create(
                 appointment=appointment,
                 patient=appointment.patient,
                 doctor=appointment.doctor,
                 **serializer.validated_data
             )
-            # Update appointment status
             appointment.status = 'completed'
             appointment.save()
             return Response({'message': 'Appointment completed successfully.'}, status=status.HTTP_200_OK)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# --- NEW: View for Patient to see their entire history ---
 class MedicalHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsPatient]
     serializer_class = AppointmentSerializer
 
     def get_queryset(self):
-        # Return all completed appointments for the patient, with related records
         return Appointment.objects.filter(
             patient=self.request.user, 
             status='completed'
         ).select_related('doctor', 'medical_record').order_by('-appointment_date')
+        
+class DoctorAppointmentHistoryView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    serializer_class = AppointmentSerializer
+
+    def get_queryset(self):
+        return Appointment.objects.filter(
+            doctor=self.request.user,
+            status='completed'
+        ).select_related('patient', 'patient__patient_profile').order_by('-appointment_date')

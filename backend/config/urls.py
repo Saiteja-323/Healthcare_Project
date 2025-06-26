@@ -5,14 +5,19 @@ from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 from employee_api.views import (
-    RegisterView, LoginView, ProfileView,
-    PatientProfileView, DoctorProfileView,
-    DoctorListView, AppointmentView, 
+    RegisterView, 
+    LoginView, 
+    ProfileView,
+    PatientProfileView, 
+    DoctorProfileView,
+    DoctorListView, 
+    AppointmentView, 
     AppointmentAvailabilityView,
-    # --- NEW IMPORTS ---
-    ManageAppointmentView,
+    ManageAppointmentView,      # This is the correct view for managing appointments
     CompleteAppointmentView,
     MedicalHistoryView,
+    DoctorAppointmentHistoryView,
+    # The incorrect 'PatientCancelAppointmentView' has been removed
 )
 
 urlpatterns = [
@@ -33,12 +38,14 @@ urlpatterns = [
     path('api/appointments/', AppointmentView.as_view(), name='appointment-list-create'),
     path('api/appointments/availability/', AppointmentAvailabilityView.as_view(), name='appointment-availability'),
 
-    # --- NEW URLS FOR UPDATED WORKFLOW ---
+    # This single URL handles actions (accept, cancel) for both doctors and patients
     path('api/appointments/<int:pk>/manage/', ManageAppointmentView.as_view(), name='appointment-manage'),
+    
     path('api/appointments/<int:pk>/complete/', CompleteAppointmentView.as_view(), name='appointment-complete'),
     path('api/medical-history/', MedicalHistoryView.as_view(), name='medical-history'),
+    path('api/appointments/history/', DoctorAppointmentHistoryView.as_view(), name='doctor-appointment-history'),
 ]
 
-# --- Add this for serving media files during development ---
+# Add this for serving media files during development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

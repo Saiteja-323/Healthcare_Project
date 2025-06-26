@@ -28,14 +28,16 @@ function TreatmentItemManager({ title, items, setItems }) {
                 <input type="number" placeholder="Qty" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" style={{flex: 1, marginRight: '5px'}}/>
                 <button type="button" onClick={handleAdd} style={styles.addButton}>Add</button>
             </div>
+            {/* --- FIX: Improved list styling for better alignment --- */}
             <ul style={styles.list}>
                 {items.map((item, index) => (
-                    <li key={index}>
-                        {item.name} (x{item.quantity})
+                    <li key={index} style={styles.listItem}>
+                        <span>{item.name} (x{item.quantity})</span>
                         <button onClick={() => handleRemove(index)} style={styles.removeButton}>×</button>
                     </li>
                 ))}
             </ul>
+            {/* --- END OF FIX --- */}
         </div>
     );
 }
@@ -77,8 +79,10 @@ function TreatmentFormModal({ appointment, onClose, onSuccess }) {
     };
 
     return (
-        <div style={styles.overlay}>
-            <form onSubmit={handleSubmit} style={styles.modal}>
+        // --- FIX: Added onClick to the overlay to close the modal ---
+        <div style={styles.overlay} onClick={onClose}>
+            <form onSubmit={handleSubmit} style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        {/* --- END OF FIX --- */}
                 <button type="button" onClick={onClose} style={styles.closeButton}>×</button>
                 <h3>Finalize Treatment for {appointment.patient.first_name}</h3>
                 {error && <p style={{ color: 'red' }}>{error}</p>}
@@ -112,7 +116,10 @@ const styles = {
     inputGroup: { display: 'flex', marginBottom: '10px' },
     addButton: { padding: '5px 10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' },
     list: { listStyle: 'none', padding: 0, maxHeight: '150px', overflowY: 'auto' },
-    removeButton: { marginLeft: '10px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer' },
+    // --- FIX: New styles for list item alignment ---
+    listItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px', borderBottom: '1px solid #f0f0f0' },
+    removeButton: { background: '#dc3545', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' },
+    // --- END OF FIX ---
     submitButton: { width: '100%', padding: '12px', marginTop: '20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px' }
 };
 

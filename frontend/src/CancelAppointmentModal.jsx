@@ -39,8 +39,10 @@ function CancelAppointmentModal({ appointment, onClose, onSuccess }) {
     };
 
     return (
-        <div style={styles.overlay}>
-            <form onSubmit={handleSubmit} style={styles.modal}>
+        // --- FIX: Added onClick to the overlay to close the modal ---
+        <div style={styles.overlay} onClick={onClose}>
+            <form onSubmit={handleSubmit} style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        {/* --- END OF FIX --- */}
                 <button type="button" onClick={onClose} style={styles.closeButton}>×</button>
                 <h3>Cancel Appointment for {appointment.patient.first_name}</h3>
                 <p>Please provide a reason and an optional future date for the patient.</p>
