@@ -96,14 +96,29 @@ function PatientDashboard() {
         navigate('/login');
     };
 
+    // --- UPDATED: This function is for cancelling BOOKED appointments ---
     const handlePatientCancel = async (appointmentId) => {
-        if (window.confirm('Are you sure you want to cancel this appointment?')) {
+        if (window.confirm('Are you sure you want to cancel this booked appointment? The doctor will be notified.')) {
             try {
                 await axios.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'cancel' });
                 alert('Appointment cancelled successfully.');
-                fetchAppointments(); // Refresh the list
+                fetchAppointments(); // Refresh the list to show the 'Cancelled' status
             } catch (err) {
                 alert(err.response?.data?.error || 'Failed to cancel appointment.');
+            }
+        }
+    };
+    
+    // --- NEW: This function DELETES pending appointment requests ---
+    const handleDeleteRequest = async (appointmentId) => {
+        if (window.confirm('Are you sure you want to withdraw this appointment request?')) {
+            try {
+                // Use the DELETE method on the same endpoint
+                await axios.delete(`/api/appointments/${appointmentId}/manage/`);
+                // Update state locally for an instant UI update, removing the appointment
+                setAppointments(prevAppointments => prevAppointments.filter(apt => apt.id !== appointmentId));
+            } catch (err) {
+                alert(err.response?.data?.error || 'Failed to withdraw the request.');
             }
         }
     };
@@ -135,7 +150,6 @@ function PatientDashboard() {
             {error && <p style={{ color: 'red' }}>{error}</p>}
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginTop: '20px' }}>
-                {/* This section uses the better table layout and includes the category filter */}
                 <section>
                     <h2>Find a Doctor</h2>
                     <div style={{ marginBottom: '15px' }}>
@@ -185,11 +199,18 @@ function PatientDashboard() {
                                         <small>Time: {apt.time_slot.replace('-', ' to ')}</small>
                                         <p style={{ margin: '8px 0 0' }}>Status: <span style={getStatusStyle(apt.status)}>{getDisplayStatus(apt.status)}</span></p>
                                         
-                                        {['pending', 'accepted'].includes(apt.status) && (
+                                        {/* --- UPDATED BUTTON LOGIC --- */}
+                                        {apt.status === 'pending' && (
+                                            <button onClick={() => handleDeleteRequest(apt.id)} style={{marginTop: '8px', padding: '4px 8px', fontSize: '0.8em', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
+                                                Cancel Appointment
+                                            </button>
+                                        )}
+                                        {apt.status === 'accepted' && (
                                             <button onClick={() => handlePatientCancel(apt.id)} style={{marginTop: '8px', padding: '4px 8px', fontSize: '0.8em', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
                                                 Cancel Appointment
                                             </button>
                                         )}
+                                        {/* --- END OF UPDATE --- */}
 
                                         {apt.status === 'cancelled' && apt.suggestion_message && (
                                             <div style={{marginTop: '5px', padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '4px'}}>

@@ -7,15 +7,17 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Count, Q
+# --- THIS IS THE CORRECTED LINE ---
 from .models import CustomUser, PatientProfile, DoctorProfile, Appointment, MedicalRecord
 from .serializers import (
     UserRegistrationSerializer, UserSerializer, LoginSerializer,
     PatientProfileSerializer, DoctorProfileSerializer, DoctorListSerializer,
-    AppointmentSerializer, TreatmentFormSerializer
+    AppointmentSerializer, TreatmentFormSerializer,
 )
 from .permissions import IsDoctor, IsPatient
 
-# ... (RegisterView, LoginView, ProfileView, etc. are unchanged) ...
+# ... (The rest of the file remains exactly the same) ...
+
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
@@ -141,9 +143,9 @@ class AppointmentAvailabilityView(APIView):
         slot_counts = {slot['time_slot']: slot['count'] for slot in availability}
         return Response(slot_counts, status=status.HTTP_200_OK)
 
-# --- FIX: MODIFIED ManageAppointmentView to allow patient cancellations ---
+
 class ManageAppointmentView(APIView):
-    permission_classes = [permissions.IsAuthenticated] # Remove IsDoctor, check role inside
+    permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, pk):
         try:
@@ -154,7 +156,6 @@ class ManageAppointmentView(APIView):
         user = request.user
         action = request.data.get('action')
 
-        # Doctor's actions
         if user.role == 'doctor':
             if appointment.doctor != user:
                 return Response({'error': 'You do not have permission to manage this appointment.'}, status=status.HTTP_403_FORBIDDEN)
@@ -174,7 +175,6 @@ class ManageAppointmentView(APIView):
             else:
                 return Response({'error': 'Invalid action for a doctor.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Patient's actions
         elif user.role == 'patient':
             if appointment.patient != user:
                 return Response({'error': 'You do not have permission to manage this appointment.'}, status=status.HTTP_403_FORBIDDEN)
@@ -183,16 +183,31 @@ class ManageAppointmentView(APIView):
                 if appointment.status not in ['pending', 'accepted']:
                     return Response({'error': 'Cannot cancel this appointment. It might be completed or already cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
                 appointment.status = 'cancelled'
-                # Patients don't add suggestion messages
                 appointment.save()
             else:
                 return Response({'error': 'Invalid action for a patient.'}, status=status.HTTP_400_BAD_REQUEST)
         
         else:
-             return Response({'error': 'Invalid user role.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Invalid user role.'}, status=status.HTTP_403_FORBIDDEN)
 
         return Response(AppointmentSerializer(appointment).data, status=status.HTTP_200_OK)
-# --- END OF FIX ---
+
+    def delete(self, request, pk):
+        try:
+            appointment = Appointment.objects.get(pk=pk)
+        except Appointment.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+
+        if not (user.role == 'patient' and appointment.patient == user):
+            return Response({'error': 'You do not have permission to delete this appointment.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if appointment.status != 'pending':
+            return Response({'error': 'Only pending appointment requests can be deleted.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        appointment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CompleteAppointmentView(APIView):
