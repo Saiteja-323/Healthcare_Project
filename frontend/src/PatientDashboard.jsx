@@ -1,4 +1,6 @@
-// frontend/src/PatientDashboard.jsx
+// --- UPDATED FILE: src/PatientDashboard.jsx ---
+
+// ... (imports remain the same) ...
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
@@ -6,6 +8,7 @@ import axios from 'axios';
 import { format } from 'date-fns';
 import AppointmentModal from './AppointmentModal';
 
+// ... (healthCategories, categoryOptions, parseDateAsLocal function remain the same) ...
 const healthCategories = {
     heart: 'Cardiology (Heart)',
     skin: 'Dermatology (Skin)',
@@ -13,16 +16,14 @@ const healthCategories = {
     respiratory: 'Pulmonology (Respiratory)',
 };
 const categoryOptions = Object.entries(healthCategories).map(([value, label]) => ({ value, label }));
-
-// Helper function to prevent timezone issues with dates from the backend
 const parseDateAsLocal = (dateString) => {
     if (!dateString) return null;
     const date = new Date(dateString);
-    // Adjust for timezone offset to display the date as it was intended
     return new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
 };
 
 function PatientDashboard() {
+    // ... (state and useEffects remain the same) ...
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     
@@ -80,42 +81,32 @@ function PatientDashboard() {
             setError(prev => `${prev} Failed to load appointments.`);
         }
     };
-    
+
+    // ... (all handlers remain the same) ...
     const refreshDashboard = () => {
         if(selectedCategory) fetchDoctors();
         fetchAppointments();
     };
-
     const handleOpenAppointmentModal = (doctor) => {
         setSelectedDoctor(doctor);
         setIsModalOpen(true);
     };
-
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
-    };
-
-    // --- UPDATED: This function is for cancelling BOOKED appointments ---
+    const handleLogout = () => { logout(); navigate('/login'); };
     const handlePatientCancel = async (appointmentId) => {
         if (window.confirm('Are you sure you want to cancel this booked appointment? The doctor will be notified.')) {
             try {
                 await axios.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'cancel' });
                 alert('Appointment cancelled successfully.');
-                fetchAppointments(); // Refresh the list to show the 'Cancelled' status
+                fetchAppointments(); 
             } catch (err) {
                 alert(err.response?.data?.error || 'Failed to cancel appointment.');
             }
         }
     };
-    
-    // --- NEW: This function DELETES pending appointment requests ---
     const handleDeleteRequest = async (appointmentId) => {
         if (window.confirm('Are you sure you want to withdraw this appointment request?')) {
             try {
-                // Use the DELETE method on the same endpoint
                 await axios.delete(`/api/appointments/${appointmentId}/manage/`);
-                // Update state locally for an instant UI update, removing the appointment
                 setAppointments(prevAppointments => prevAppointments.filter(apt => apt.id !== appointmentId));
             } catch (err) {
                 alert(err.response?.data?.error || 'Failed to withdraw the request.');
@@ -123,7 +114,6 @@ function PatientDashboard() {
         }
     };
 
-    // A more robust loading check
     if (loading && !doctors.length && !appointments.length) return <div>Loading Patient Dashboard...</div>;
     if (!user || !user.patient_profile) return <div>Redirecting...</div>;
     
@@ -131,7 +121,6 @@ function PatientDashboard() {
         color: { completed: 'green', accepted: 'blue', pending: 'orange', cancelled: 'red' }[status] || 'black',
         fontWeight: 'bold'
     });
-    
     const getDisplayStatus = (status) => status === 'accepted' ? 'Booked' : status.charAt(0).toUpperCase() + status.slice(1);
 
     return (
@@ -142,11 +131,15 @@ function PatientDashboard() {
                 <h1>Patient Home</h1>
                 <div>
                     <span style={{ marginRight: '15px' }}>Hi, {user.first_name || user.username}!</span>
-                    <Link to="/patient/history" style={{marginRight: '15px', padding: '8px 15px', backgroundColor: '#17a2b8', color: 'white', textDecoration: 'none', borderRadius: '4px'}}>View Medical History</Link>
-                    <button onClick={handleLogout} style={{ padding: '8px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>Logout</button>
+                    {/* --- NEW LINKS ADDED --- */}
+                    <Link to="/patient/diagnostic-reports" style={styles.navLink}>Test Reports</Link>
+                    <Link to="/patient/medication-bills" style={styles.navLink}>Medication Bills</Link>
+                    <Link to="/patient/history" style={styles.navLink}>Medical History</Link>
+                    <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
                 </div>
             </header>
 
+            {/* ... (Rest of the JSX remains the same, displaying doctor list and appointments) ... */}
             {error && <p style={{ color: 'red' }}>{error}</p>}
 
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginTop: '20px' }}>
@@ -199,10 +192,9 @@ function PatientDashboard() {
                                         <small>Time: {apt.time_slot.replace('-', ' to ')}</small>
                                         <p style={{ margin: '8px 0 0' }}>Status: <span style={getStatusStyle(apt.status)}>{getDisplayStatus(apt.status)}</span></p>
                                         
-                                        {/* --- UPDATED BUTTON LOGIC --- */}
                                         {apt.status === 'pending' && (
                                             <button onClick={() => handleDeleteRequest(apt.id)} style={{marginTop: '8px', padding: '4px 8px', fontSize: '0.8em', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>
-                                                Cancel Appointment
+                                                Withdraw Request
                                             </button>
                                         )}
                                         {apt.status === 'accepted' && (
@@ -210,7 +202,6 @@ function PatientDashboard() {
                                                 Cancel Appointment
                                             </button>
                                         )}
-                                        {/* --- END OF UPDATE --- */}
 
                                         {apt.status === 'cancelled' && apt.suggestion_message && (
                                             <div style={{marginTop: '5px', padding: '8px', backgroundColor: '#fff3cd', border: '1px solid #ffeeba', borderRadius: '4px'}}>
@@ -228,4 +219,24 @@ function PatientDashboard() {
         </div>
     );
 }
+
+// Add new styles
+const styles = {
+    navLink: {
+        marginRight: '15px', 
+        padding: '8px 15px', 
+        backgroundColor: '#17a2b8', 
+        color: 'white', 
+        textDecoration: 'none', 
+        borderRadius: '4px'
+    },
+    logoutButton: {
+        padding: '8px 15px', 
+        backgroundColor: '#dc3545', 
+        color: 'white', 
+        border: 'none', 
+        borderRadius: '4px'
+    }
+};
+
 export default PatientDashboard;

@@ -20,3 +20,5 @@ requirements.txt text
 *.jpeg binary
 *.gif binary
 *.ico binary
+
+* text=auto

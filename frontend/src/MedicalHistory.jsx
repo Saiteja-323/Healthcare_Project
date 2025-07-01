@@ -1,9 +1,22 @@
-// src/MedicalHistory.jsx
+// --- CORRECTED FILE: frontend/src/MedicalHistory.jsx ---
+
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useAuth } from './AuthContext';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
+import axios from 'axios';
+
+const timingLabels = {
+    mbe: 'Morning (Before Eat)', maf: 'Morning (After Eat)',
+    abe: 'Afternoon (Before Eat)', aaf: 'Afternoon (After Eat)',
+    nbe: 'Night (Before Eat)', naf: 'Night (After Eat)',
+};
+
+const parseDateAsLocal = (dateString) => {
+    if (!dateString) return new Date();
+    const date = new Date(dateString);
+    return new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
+};
 
 function MedicalHistory() {
     useAuth();
@@ -19,7 +32,7 @@ function MedicalHistory() {
         setLoading(true);
         try {
             const response = await axios.get('/api/medical-history/');
-            setHistory(response.data);
+            setHistory(Array.isArray(response.data) ? response.data : []);
         } catch (err) {
             setError('Failed to fetch medical history.');
             console.error(err);
@@ -28,23 +41,60 @@ function MedicalHistory() {
         }
     };
     
-    const renderMedicines = (record) => {
-        const categories = ['tablets', 'syrups', 'injections', 'ointments'];
-        const allMeds = [];
-
-        categories.forEach(cat => {
-            if (record[cat] && Object.keys(record[cat]).length > 0) {
-                for (const [name, quantity] of Object.entries(record[cat])) {
-                    allMeds.push(
-                        <li key={`${cat}-${name}`}>
-                            {name} ({quantity}) - <em style={{color: '#666'}}>{cat.slice(0, -1)}</em>
-                        </li>
-                    );
-                }
-            }
-        });
+    const renderMedicines = (medicationDetails, isBillPaid) => {
+        if (!isBillPaid) {
+            return <p>Prescription details will be available after the bill is paid. <Link to="/patient/medication-bills">Go to Payments</Link>.</p>;
+        }
         
-        return allMeds.length > 0 ? <ul>{allMeds}</ul> : <p>No medicines were prescribed.</p>;
+        const allMeds = [];
+        // FIX: Check if medicationDetails is a valid object
+        if (typeof medicationDetails !== 'object' || medicationDetails === null) {
+            return <p>No medicines were prescribed.</p>;
+        }
+
+        for (const category in medicationDetails) {
+            if (Object.keys(medicationDetails[category]).length > 0) {
+                 allMeds.push(<h4 key={category} style={{textTransform: 'capitalize', marginTop: '15px'}}>{category}</h4>)
+                 const medList = (
+                    <ul key={`${category}-list`}>
+                        {Object.entries(medicationDetails[category]).map(([name, details]) => (
+                            <li key={name}>
+                                <strong>{name}</strong> (Quantity: {details.quantity})<br/>
+                                <small>Timings: {details.timings?.map(t => timingLabels[t] || t).join(', ') || 'Not specified'}</small>
+                            </li>
+                        ))}
+                    </ul>
+                );
+                allMeds.push(medList);
+            }
+        }
+        return allMeds.length > 0 ? <div>{allMeds}</div> : <p>No medicines were prescribed for this appointment.</p>;
+    };
+
+    const renderTests = (tests) => {
+        if (!Array.isArray(tests) || tests.length === 0) {
+            return <p>No tests were prescribed for this appointment.</p>;
+        }
+
+        // --- BUG FIX: Display results on a per-test basis ---
+        return (
+            <ul>
+                {tests.map(test => (
+                    <li key={test.id}>
+                        <strong>{test.test_name}:</strong>
+                        {test.is_paid ? 
+                            <span style={{textTransform: 'capitalize', marginLeft: '5px'}}>
+                                {test.result || 'Result pending'}
+                            </span>
+                            : 
+                            <em style={{marginLeft: '5px', color: '#888'}}>
+                                (Result available after payment. <Link to="/patient/diagnostic-reports">Pay Now</Link>)
+                            </em>
+                        }
+                    </li>
+                ))}
+            </ul>
+        );
     };
 
     if (loading) return <div>Loading Medical History...</div>;
@@ -64,28 +114,21 @@ function MedicalHistory() {
                 history.map(apt => (
                     <div key={apt.id} style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
                         <h2 style={{ borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-                            Consultation on {format(new Date(apt.appointment_date), 'MMMM dd, yyyy')}
+                            Consultation on {format(parseDateAsLocal(apt.appointment_date), 'MMMM dd, yyyy')}
                         </h2>
-                        <p><strong>Doctor:</strong> Dr. {apt.doctor.first_name} {apt.doctor.last_name}</p>
+                        <p><strong>Doctor:</strong> Dr. {apt.doctor?.first_name} {apt.doctor?.last_name}</p>
                         
-                        {apt.medical_record ? (
-                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
-                                <div>
-                                    <h3>Prescribed Items</h3>
-                                    {renderMedicines(apt.medical_record)}
-                                </div>
-                                <div>
-                                    <h3>Doctor's Reports/Notes</h3>
-                                    {apt.medical_record.report_file ? (
-                                        <a href={apt.medical_record.report_file} target="_blank" rel="noopener noreferrer" style={{color: '#007bff'}}>
-                                            Download Report
-                                        </a>
-                                    ) : <p>No report was uploaded.</p>}
-                                </div>
+                        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '15px'}}>
+                            <div>
+                                <h3>Prescription Details</h3>
+                                {/* FIX: Use optional chaining for safety */}
+                                {renderMedicines(apt.medical_record?.medication_details, apt.medication_bill?.is_paid)}
                             </div>
-                        ) : (
-                            <p>No medical record found for this appointment.</p>
-                        )}
+                            <div>
+                                <h3>Diagnostic Test Results</h3>
+                                {renderTests(apt.diagnostic_tests)}
+                            </div>
+                        </div>
                     </div>
                 ))
             ) : (

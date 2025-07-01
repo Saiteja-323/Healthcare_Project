@@ -1,7 +1,8 @@
-// frontend/src/DoctorDashboard.jsx
+// --- CORRECTED FILE: frontend/src/DoctorDashboard.jsx ---
+
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { format } from 'date-fns';
 import TreatmentFormModal from './TreatmentFormModal';
@@ -20,30 +21,21 @@ function DoctorDashboard() {
     const [pendingAppointments, setPendingAppointments] = useState([]);
     const [acceptedAppointments, setAcceptedAppointments] = useState([]);
     const [completedAppointments, setCompletedAppointments] = useState([]);
-
-    // We will use a single loading state for the component's main data
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
     const [treatmentModal, setTreatmentModal] = useState({ isOpen: false, appointment: null });
     const [cancelModal, setCancelModal] = useState({ isOpen: false, appointment: null });
 
-    // --- LOGIC HAS BEEN REFINED HERE ---
     useEffect(() => {
-        // This effect runs whenever the 'user' object from context changes.
         if (user) {
-            // First, check if the doctor's profile exists.
-            // This is the correct place for this logic.
             if (!user.doctor_profile) {
-                // If no profile, redirect immediately.
                 navigate('/doctor/complete-profile');
-                return; // Stop the effect from running further.
+                return; 
             }
-            
-            // If the profile exists, proceed to fetch all appointment data.
             fetchAllAppointments();
         }
-    }, [user, navigate]); // This effect depends on the user object.
+    }, [user, navigate]);
 
     const fetchAllAppointments = () => {
         setLoading(true);
@@ -52,9 +44,14 @@ function DoctorDashboard() {
             axios.get('/api/appointments/'),      // Fetches pending and accepted
             axios.get('/api/appointments/history/') // Fetches completed
         ]).then(([activeRes, completedRes]) => {
-            setPendingAppointments(activeRes.data.filter(apt => apt.status === 'pending'));
-            setAcceptedAppointments(activeRes.data.filter(apt => apt.status === 'accepted'));
-            setCompletedAppointments(completedRes.data);
+            // FIX: Ensure data is an array before filtering
+            const activeData = Array.isArray(activeRes.data) ? activeRes.data : [];
+            const completedData = Array.isArray(completedRes.data) ? completedRes.data : [];
+
+            setPendingAppointments(activeData.filter(apt => apt.status === 'pending'));
+            // --- BUG FIX: Was `active.data`, corrected to `activeRes.data` (via activeData) ---
+            setAcceptedAppointments(activeData.filter(apt => apt.status === 'accepted'));
+            setCompletedAppointments(completedData);
         }).catch(() => {
             setError('Failed to fetch appointments.');
         }).finally(() => {
@@ -75,13 +72,9 @@ function DoctorDashboard() {
     const handleOpenTreatmentModal = (appointment) => setTreatmentModal({ isOpen: true, appointment });
     const handleLogout = () => { logout(); navigate('/login'); };
 
-    // --- SIMPLIFIED AND MORE ROBUST LOADING CHECK ---
-    // The ProtectedRoute already ensures `user` exists and has the correct role.
-    // We just show a loading screen while the useEffect fetches data.
     if (loading) {
         return <div>Loading Doctor Dashboard...</div>;
     }
-    // --- END OF FIX ---
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -91,8 +84,9 @@ function DoctorDashboard() {
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
                 <h1>Doctor's Dashboard</h1>
                 <div>
-                    {/* Added a check for user existence before trying to access properties */}
-                    <span style={{ marginRight: '15px' }}>Hi, Dr. {user?.last_name || user?.username}!</span>
+                    <Link to="/doctor/diagnostic-center" style={styles.navLink}>Manage Tests</Link>
+                    <Link to="/doctor/medical-payments" style={styles.navLink}>Manage Payments</Link>
+                    <span style={{ marginRight: '15px', marginLeft: '15px' }}>Hi, Dr. {user?.last_name || user?.username}!</span>
                     <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
                 </div>
             </header>
@@ -107,8 +101,8 @@ function DoctorDashboard() {
                         <tbody>
                             {pendingAppointments.map(apt => (
                                 <tr key={apt.id}>
-                                    <td style={styles.td}>{apt.patient.first_name} {apt.patient.last_name}</td>
-                                    <td style={styles.td}>{apt.patient.patient_profile?.current_symptoms || 'N/A'}</td>
+                                    <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
+                                    <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
                                     <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')} at {apt.time_slot}</td>
                                     <td style={styles.td}>{apt.initial_report ? <a href={apt.initial_report} target="_blank" rel="noopener noreferrer">View Report</a> : 'None'}</td>
                                     <td style={{...styles.td, textAlign: 'center'}}>
@@ -130,10 +124,10 @@ function DoctorDashboard() {
                         <tbody>
                             {acceptedAppointments.map(apt => (
                                 <tr key={apt.id}>
-                                    <td style={styles.td}>{apt.patient.first_name} {apt.patient.last_name}</td>
-                                    <td style={styles.td}>{apt.patient.patient_profile?.current_symptoms || 'N/A'}</td>
+                                    <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
+                                    <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
                                     <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')} at {apt.time_slot}</td>
-                                    <td style={styles.td}>{apt.patient.patient_profile?.medical_history || 'N/A'}</td>
+                                    <td style={styles.td}>{apt.patient?.patient_profile?.medical_history || 'N/A'}</td>
                                     <td style={{...styles.td, textAlign: 'center'}}>
                                         <button onClick={() => handleOpenTreatmentModal(apt)} style={{...styles.button, ...styles.completeButton}}>Finalize & Prescribe</button>
                                     </td>
@@ -147,17 +141,15 @@ function DoctorDashboard() {
             <section style={{marginTop: '40px'}}>
                 <h2>Completed Appointments History ({completedAppointments.length})</h2>
                 {completedAppointments.length > 0 ? (
-                        <table style={styles.table}>
+                     <table style={styles.table}>
                         <thead style={styles.thead}><tr><th style={styles.th}>Patient</th><th style={styles.th}>Date</th><th style={styles.th}>View Prescription</th></tr></thead>
                         <tbody>
                             {completedAppointments.map(apt => (
                                 <tr key={apt.id}>
-                                    <td style={styles.td}>{apt.patient.first_name} {apt.patient.last_name}</td>
+                                    <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
                                     <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')}</td>
                                     <td style={styles.td}>
-                                        {apt.medical_record?.report_file ? (
-                                            <a href={apt.medical_record.report_file} target="_blank" rel="noopener noreferrer">View Report</a>
-                                        ) : ( 'No report uploaded' )}
+                                        <Link to="/patient/history">View in History</Link>
                                     </td>
                                 </tr>
                             ))}
@@ -170,6 +162,7 @@ function DoctorDashboard() {
 }
 
 const styles = {
+    navLink: { padding: '8px 15px', backgroundColor: '#17a2b8', color: 'white', textDecoration: 'none', borderRadius: '4px', marginRight: '10px' },
     logoutButton: { padding: '8px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' },
     table: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
     thead: { backgroundColor: '#f8f9fa' },

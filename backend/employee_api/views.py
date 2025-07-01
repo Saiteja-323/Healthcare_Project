@@ -1,4 +1,4 @@
-# backend/employee_api/views.py
+# --- UPDATED FILE: backend/employee_api/views.py ---
 
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -7,17 +7,21 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Count, Q
-# --- THIS IS THE CORRECTED LINE ---
-from .models import CustomUser, PatientProfile, DoctorProfile, Appointment, MedicalRecord
+from django.db import transaction
+
+from .models import (
+    CustomUser, PatientProfile, DoctorProfile, Appointment, 
+    MedicalRecord, DiagnosticTest, MedicationBill
+)
 from .serializers import (
     UserRegistrationSerializer, UserSerializer, LoginSerializer,
     PatientProfileSerializer, DoctorProfileSerializer, DoctorListSerializer,
     AppointmentSerializer, TreatmentFormSerializer,
+    DiagnosticTestSerializer, MedicationBillSerializer, # NEW IMPORTS
 )
 from .permissions import IsDoctor, IsPatient
 
-# ... (The rest of the file remains exactly the same) ...
-
+# ... (RegisterView, LoginView, ProfileView, PatientProfileView, DoctorProfileView, DoctorListView, AppointmentView, AppointmentAvailabilityView, ManageAppointmentView remain the same) ...
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
@@ -188,7 +192,7 @@ class ManageAppointmentView(APIView):
                 return Response({'error': 'Invalid action for a patient.'}, status=status.HTTP_400_BAD_REQUEST)
         
         else:
-            return Response({'error': 'Invalid user role.'}, status=status.HTTP_403_FORBIDDEN)
+             return Response({'error': 'Invalid user role.'}, status=status.HTTP_403_FORBIDDEN)
 
         return Response(AppointmentSerializer(appointment).data, status=status.HTTP_200_OK)
 
@@ -209,41 +213,81 @@ class ManageAppointmentView(APIView):
         appointment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
+# --- HEAVILY UPDATED CompleteAppointmentView ---
 class CompleteAppointmentView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, pk):
         try:
-            appointment = Appointment.objects.get(pk=pk, doctor=request.user, status='accepted')
+            appointment = Appointment.objects.select_related('patient', 'doctor').get(pk=pk, doctor=request.user, status='accepted')
         except Appointment.DoesNotExist:
             return Response({'error': 'Accepted appointment not found.'}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = TreatmentFormSerializer(data=request.data)
         if serializer.is_valid():
-            MedicalRecord.objects.create(
-                appointment=appointment,
-                patient=appointment.patient,
-                doctor=appointment.doctor,
-                **serializer.validated_data
-            )
-            appointment.status = 'completed'
-            appointment.save()
-            return Response({'message': 'Appointment completed successfully.'}, status=status.HTTP_200_OK)
+            med_details = serializer.validated_data.get('medication_details', {})
+            test_list = serializer.validated_data.get('prescribed_tests', [])
+
+            try:
+                with transaction.atomic():
+                    # 1. Create the Medical Record
+                    MedicalRecord.objects.create(
+                        appointment=appointment,
+                        patient=appointment.patient,
+                        doctor=appointment.doctor,
+                        medication_details=med_details,
+                        prescribed_tests=test_list
+                    )
+
+                    # 2. Create DiagnosticTest entries for the diagnostic center
+                    for test_name in test_list:
+                        DiagnosticTest.objects.create(
+                            appointment=appointment,
+                            patient=appointment.patient,
+                            doctor=appointment.doctor,
+                            test_name=test_name
+                        )
+                    
+                    # 3. Create a MedicationBill entry for the pharmacy/payment
+                    if med_details: # Only create a bill if meds are prescribed
+                        MedicationBill.objects.create(
+                            appointment=appointment,
+                            patient=appointment.patient,
+                            doctor=appointment.doctor
+                        )
+
+                    # 4. Mark appointment as completed
+                    appointment.status = 'completed'
+                    appointment.save()
+
+            except Exception as e:
+                # Log the error e
+                return Response({'error': 'An internal error occurred while saving records.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return Response({'message': 'Appointment completed and records created successfully.'}, status=status.HTTP_200_OK)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# --- UPDATED MedicalHistoryView ---
 class MedicalHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsPatient]
     serializer_class = AppointmentSerializer
 
     def get_queryset(self):
+        # Prefetch related data for efficiency
         return Appointment.objects.filter(
             patient=self.request.user, 
             status='completed'
-        ).select_related('doctor', 'medical_record').order_by('-appointment_date')
+        ).select_related(
+            'doctor', 
+            'medical_record', 
+            'medication_bill'
+        ).prefetch_related(
+            'diagnostic_tests'
+        ).order_by('-appointment_date')
         
+# --- UPDATED DoctorAppointmentHistoryView ---
 class DoctorAppointmentHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     serializer_class = AppointmentSerializer
@@ -253,3 +297,97 @@ class DoctorAppointmentHistoryView(generics.ListAPIView):
             doctor=self.request.user,
             status='completed'
         ).select_related('patient', 'patient__patient_profile').order_by('-appointment_date')
+
+# --- NEW VIEWS FOR DOCTOR ---
+
+class DoctorDiagnosticCenterView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    serializer_class = DiagnosticTestSerializer
+
+    def get_queryset(self):
+        return DiagnosticTest.objects.filter(doctor=self.request.user).order_by('-created_at')
+
+class DoctorManageDiagnosticTestView(generics.UpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    serializer_class = DiagnosticTestSerializer
+    queryset = DiagnosticTest.objects.all()
+    
+    def get_queryset(self):
+        return self.queryset.filter(doctor=self.request.user)
+
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.cost = request.data.get('cost', instance.cost)
+        instance.result = request.data.get('result', instance.result)
+        if request.data.get('send_to_patient'):
+            instance.is_sent_to_patient = True
+        instance.save()
+        return Response(self.get_serializer(instance).data)
+
+class DoctorMedicalPaymentsView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    serializer_class = MedicationBillSerializer
+
+    def get_queryset(self):
+        return MedicationBill.objects.filter(doctor=self.request.user).order_by('-created_at')
+
+class DoctorManageMedicalBillView(generics.UpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    serializer_class = MedicationBillSerializer
+    queryset = MedicationBill.objects.all()
+
+    def get_queryset(self):
+        return self.queryset.filter(doctor=self.request.user)
+    
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.total_cost = request.data.get('total_cost', instance.total_cost)
+        if request.data.get('send_to_patient'):
+            instance.is_sent_to_patient = True
+        instance.save()
+        return Response(self.get_serializer(instance).data)
+
+
+# --- NEW VIEWS FOR PATIENT ---
+
+class PatientDiagnosticCenterView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+    serializer_class = DiagnosticTestSerializer
+
+    def get_queryset(self):
+        # Show tests that are sent and group them by appointment
+        return DiagnosticTest.objects.filter(patient=self.request.user, is_sent_to_patient=True).order_by('-appointment__appointment_date', 'test_name')
+
+class PatientPayForTestView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+
+    def post(self, request, appointment_id):
+        # Patient pays for all tests of a specific appointment at once
+        tests = DiagnosticTest.objects.filter(patient=request.user, appointment_id=appointment_id, is_paid=False)
+        if not tests.exists():
+            return Response({'error': 'No unpaid tests found for this appointment.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        tests.update(is_paid=True)
+        return Response({'message': 'Payment successful. You can now view your results.'}, status=status.HTTP_200_OK)
+
+class PatientMedicalPaymentsView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+    serializer_class = MedicationBillSerializer
+
+    def get_queryset(self):
+        return MedicationBill.objects.filter(patient=self.request.user, is_sent_to_patient=True).order_by('-created_at')
+
+class PatientPayForBillView(generics.UpdateAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsPatient]
+    serializer_class = MedicationBillSerializer
+    queryset = MedicationBill.objects.all()
+
+    def get_queryset(self):
+        return self.queryset.filter(patient=self.request.user, is_paid=False)
+        
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.is_paid = True
+        instance.save()
+        # In a real app, you would integrate a payment gateway here
+        return Response({'message': 'Payment successful. Your prescription is saved to your medical history.'}, status=status.HTTP_200_OK)
