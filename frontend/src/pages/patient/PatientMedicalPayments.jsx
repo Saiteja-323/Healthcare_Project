@@ -10,10 +10,6 @@ function PatientMedicalPayments() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchBills();
-    }, []);
-
     const fetchBills = async () => {
         setLoading(true);
         setError('');
@@ -21,13 +17,16 @@ function PatientMedicalPayments() {
             const res = await axios.get('/api/patient/medical-payments/');
             setBills(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
-            // FIX: Use the 'err' variable.
-            console.error("Failed to fetch bills:", err);
+            console.error("Fetch Error:", err); // Log the error
             setError('Failed to fetch your medication bills.');
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchBills();
+    }, []);
 
     const handlePay = async (billId) => {
         if (!window.confirm('Proceed to payment? This is a simulation.')) return;
@@ -36,8 +35,7 @@ function PatientMedicalPayments() {
             alert('Payment Successful! Your prescription is now available in Medical History.');
             fetchBills();
         } catch (err) {
-            // FIX: Use the 'err' variable.
-            console.error("Payment failed:", err);
+            console.error("Payment Error:", err); // Log the error
             alert('Payment failed. Please try again.');
         }
     };

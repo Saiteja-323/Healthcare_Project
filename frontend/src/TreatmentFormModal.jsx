@@ -1,18 +1,16 @@
-// --- UPDATED FILE: src/TreatmentFormModal.jsx ---
+// --- CORRECTED & ENHANCED FILE: frontend/src/TreatmentFormModal.jsx ---
 
 import { useState } from 'react';
 import axios from 'axios';
 
 const timingOptions = [
-    { key: 'mbe', label: 'Morning (Before Eat)' },
-    { key: 'maf', label: 'Morning (After Eat)' },
-    { key: 'abe', label: 'Afternoon (Before Eat)' },
-    { key: 'aaf', label: 'Afternoon (After Eat)' },
-    { key: 'nbe', label: 'Night (Before Eat)' },
-    { key: 'naf', label: 'Night (After Eat)' },
+    { key: 'mbe', label: 'Morning (Before Eat)' }, { key: 'maf', label: 'Morning (After Eat)' },
+    { key: 'abe', label: 'Afternoon (Before Eat)' }, { key: 'aaf', label: 'Afternoon (After Eat)' },
+    { key: 'nbe', label: 'Night (Before Eat)' }, { key: 'naf', label: 'Night (After Eat)' },
 ];
 
-function MedicineInput({ category, items, setItems }) {
+// Refactored MedicineInput for more robust add/remove logic
+function MedicineInput({ categoryName, categoryItems, setMedications }) {
     const [name, setName] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [timings, setTimings] = useState([]);
@@ -27,21 +25,29 @@ function MedicineInput({ category, items, setItems }) {
             alert('Please enter name, quantity, and select at least one timing.');
             return;
         }
-        setItems(prev => ({...prev, [name]: { quantity, timings }}));
+        setMedications(prev => ({
+            ...prev,
+            [categoryName]: { ...prev[categoryName], [name]: { quantity, timings } }
+        }));
         setName('');
         setQuantity(1);
         setTimings([]);
+        // Clear checkboxes visually
+        document.querySelectorAll(`input[name=${categoryName}-timing]`).forEach(el => el.checked = false);
     };
 
+    // --- FIX: Correctly implemented remove functionality ---
     const handleRemove = (itemName) => {
-        const newItems = { ...items };
-        delete newItems[itemName];
-        setItems(newItems);
+        setMedications(prev => {
+            const updatedCategory = { ...prev[categoryName] };
+            delete updatedCategory[itemName];
+            return { ...prev, [categoryName]: updatedCategory };
+        });
     };
 
     return (
         <div style={styles.section}>
-            <h4>{category}</h4>
+            <h4>{categoryName}</h4>
             <div style={styles.inputGroup}>
                 <input type="text" placeholder="Medicine Name" value={name} onChange={e => setName(e.target.value)} style={{flex: 2, marginRight: '5px'}}/>
                 <input type="number" placeholder="Qty" value={quantity} onChange={e => setQuantity(e.target.value)} min="1" style={{flex: 1, marginRight: '5px'}}/>
@@ -49,17 +55,17 @@ function MedicineInput({ category, items, setItems }) {
             <div style={styles.timingsGrid}>
                 {timingOptions.map(opt => (
                     <label key={opt.key} style={{fontSize: '0.8em'}}>
-                        <input type="checkbox" value={opt.key} checked={timings.includes(opt.key)} onChange={handleTimingChange} />
+                        <input type="checkbox" value={opt.key} name={`${categoryName}-timing`} onChange={handleTimingChange} />
                         {opt.label}
                     </label>
                 ))}
             </div>
-            <button type="button" onClick={handleAdd} style={{...styles.addButton, width: '100%', marginTop: '10px'}}>Add {category.slice(0, -1)}</button>
+            <button type="button" onClick={handleAdd} style={{...styles.addButton, width: '100%', marginTop: '10px'}}>Add {categoryName.slice(0, -1)}</button>
             <ul style={styles.list}>
-                {Object.entries(items).map(([itemName, details]) => (
+                {Object.entries(categoryItems).map(([itemName, details]) => (
                     <li key={itemName} style={styles.listItem}>
                         <span>{itemName} (x{details.quantity}) - <small>{details.timings.join(', ')}</small></span>
-                        <button onClick={() => handleRemove(itemName)} style={styles.removeButton}>×</button>
+                        <button type="button" onClick={() => handleRemove(itemName)} style={styles.removeButton}>×</button>
                     </li>
                 ))}
             </ul>
@@ -67,6 +73,7 @@ function MedicineInput({ category, items, setItems }) {
     );
 }
 
+// Refactored TestInput for robust remove functionality
 function TestInput({ tests, setTests }) {
     const [testName, setTestName] = useState('');
     const handleAdd = () => {
@@ -74,8 +81,9 @@ function TestInput({ tests, setTests }) {
         setTests(prev => [...prev, testName.trim()]);
         setTestName('');
     };
-    const handleRemove = (index) => {
-        setTests(prev => prev.filter((_, i) => i !== index));
+    // --- FIX: Correctly implemented remove functionality ---
+    const handleRemove = (indexToRemove) => {
+        setTests(prev => prev.filter((_, index) => index !== indexToRemove));
     };
     return (
         <div style={styles.section}>
@@ -88,7 +96,7 @@ function TestInput({ tests, setTests }) {
                 {tests.map((test, index) => (
                     <li key={index} style={styles.listItem}>
                         <span>{test}</span>
-                        <button onClick={() => handleRemove(index)} style={styles.removeButton}>×</button>
+                        <button type="button" onClick={() => handleRemove(index)} style={styles.removeButton}>×</button>
                     </li>
                 ))}
             </ul>
@@ -96,10 +104,9 @@ function TestInput({ tests, setTests }) {
     );
 }
 
-
 function TreatmentFormModal({ appointment, onClose, onSuccess }) {
     const [medications, setMedications] = useState({
-        tablets: {}, syrups: {}, injections: {}, ointments: {}, instruments: {}
+        Tablets: {}, Syrups: {}, Injections: {}, Ointments: {}, Instruments: {}
     });
     const [prescribedTests, setPrescribedTests] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -111,10 +118,9 @@ function TreatmentFormModal({ appointment, onClose, onSuccess }) {
         setError('');
         
         const formData = new FormData();
-        // Clean up empty medication categories before sending
         const finalMedications = Object.entries(medications).reduce((acc, [key, value]) => {
             if(Object.keys(value).length > 0) {
-                acc[key] = value;
+                acc[key.toLowerCase()] = value; // Convert key to lowercase for backend
             }
             return acc;
         }, {});
@@ -127,13 +133,12 @@ function TreatmentFormModal({ appointment, onClose, onSuccess }) {
         }
         
         try {
-            await axios.post(`/api/appointments/${appointment.id}/complete/`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' } // Still needed if you might add files later
-            });
+            await axios.post(`/api/appointments/${appointment.id}/complete/`, formData);
             alert('Treatment submitted successfully! Records sent for processing.');
-            onSuccess();
+            onSuccess(); // This refreshes the dashboard
             onClose();
         } catch (err) {
+            console.error("Submission Error:", err); // Log the error
             const errorMsg = err.response?.data?.error || 'Failed to submit treatment.';
             setError(errorMsg);
         } finally {
@@ -149,11 +154,14 @@ function TreatmentFormModal({ appointment, onClose, onSuccess }) {
                 {error && <p style={{ color: 'red' }}>{error}</p>}
                 
                 <div style={styles.grid}>
-                    <MedicineInput category="Tablets" items={medications.tablets} setItems={items => setMedications(p => ({...p, tablets: items}))}/>
-                    <MedicineInput category="Syrups" items={medications.syrups} setItems={items => setMedications(p => ({...p, syrups: items}))}/>
-                    <MedicineInput category="Injections" items={medications.injections} setItems={items => setMedications(p => ({...p, injections: items}))}/>
-                    <MedicineInput category="Ointments" items={medications.ointments} setItems={items => setMedications(p => ({...p, ointments: items}))}/>
-                    <MedicineInput category="Instruments" items={medications.instruments} setItems={items => setMedications(p => ({...p, instruments: items}))}/>
+                    {Object.keys(medications).map(category => (
+                         <MedicineInput 
+                            key={category}
+                            categoryName={category}
+                            categoryItems={medications[category]}
+                            setMedications={setMedications}
+                        />
+                    ))}
                     <TestInput tests={prescribedTests} setTests={setPrescribedTests} />
                 </div>
                 
@@ -173,7 +181,7 @@ const styles = {
     section: { border: '1px solid #eee', padding: '15px', borderRadius: '5px' },
     inputGroup: { display: 'flex', marginBottom: '10px' },
     timingsGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' },
-    addButton: { padding: '8px 12px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' },
+    addButton: { padding: '8px 12px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' },
     list: { listStyle: 'none', padding: 0, maxHeight: '150px', overflowY: 'auto', marginTop: '10px' },
     listItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px', borderBottom: '1px solid #f0f0f0' },
     removeButton: { background: '#dc3545', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: '1' },

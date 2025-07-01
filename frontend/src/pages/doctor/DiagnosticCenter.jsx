@@ -10,10 +10,6 @@ function DiagnosticCenter() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchTests();
-    }, []);
-
     const fetchTests = async () => {
         setLoading(true);
         setError('');
@@ -23,13 +19,16 @@ function DiagnosticCenter() {
             const testsWithEditState = data.map(t => ({...t, editCost: t.cost || '', editResult: t.result || ''}));
             setTests(testsWithEditState);
         } catch (err) {
-            // FIX: Use the 'err' variable to satisfy the linter and aid debugging.
-            console.error("Failed to fetch tests:", err);
+            console.error("Fetch Error:", err); // Log the error
             setError('Failed to fetch diagnostic tests.');
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchTests();
+    }, []);
 
     const handleUpdate = (id, field, value) => {
         setTests(tests.map(t => t.id === id ? { ...t, [field]: value } : t));
@@ -49,19 +48,24 @@ function DiagnosticCenter() {
             alert('Report sent to patient successfully!');
             fetchTests(); // Refresh data
         } catch (err) {
-            // FIX: Use the 'err' variable.
-            console.error("Failed to send report:", err);
+            console.error("Send Error:", err); // Log the error
             alert('Failed to send report.');
         }
     };
 
-    if (loading) return <div>Loading...</div>;
+    if (loading && tests.length === 0) return <div>Loading...</div>;
 
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: 'auto' }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h1>Diagnostic Center - Manage Test Reports</h1>
-                <Link to="/doctor/dashboard">Back to Dashboard</Link>
+                <div>
+                    {/* --- FEATURE: ADDED REFRESH BUTTON --- */}
+                    <button onClick={fetchTests} disabled={loading} style={{marginRight: '15px'}}>
+                        {loading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                    <Link to="/doctor/dashboard">Back to Dashboard</Link>
+                </div>
             </header>
             {error && <p style={{color: 'red'}}>{error}</p>}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -100,7 +104,7 @@ function DiagnosticCenter() {
                                 </button>
                             </td>
                         </tr>
-                    )) : <tr><td colSpan="7" style={{textAlign: 'center', padding: '20px'}}>No prescribed tests found.</td></tr>}
+                    )) : <tr><td colSpan="7" style={{textAlign: 'center', padding: '20px'}}>No prescribed tests found. New tests will appear here after a prescription is submitted.</td></tr>}
                 </tbody>
             </table>
         </div>

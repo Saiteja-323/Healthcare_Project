@@ -10,10 +10,6 @@ function MedicalPayments() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
-    useEffect(() => {
-        fetchBills();
-    }, []);
-
     const fetchBills = async () => {
         setLoading(true);
         setError('');
@@ -23,13 +19,16 @@ function MedicalPayments() {
             const billsWithEditState = data.map(b => ({...b, editCost: b.total_cost || ''}));
             setBills(billsWithEditState);
         } catch (err) {
-            // FIX: Use the 'err' variable.
-            console.error("Failed to fetch bills:", err);
+            console.error("Fetch Error:", err); // Log the error
             setError('Failed to fetch medical bills.');
         } finally {
             setLoading(false);
         }
     };
+    
+    useEffect(() => {
+        fetchBills();
+    }, []);
 
     const handleUpdate = (id, value) => {
         setBills(bills.map(b => b.id === id ? { ...b, editCost: value } : b));
@@ -48,8 +47,7 @@ function MedicalPayments() {
             alert('Bill sent to patient successfully!');
             fetchBills();
         } catch (err) {
-            // FIX: Use the 'err' variable.
-            console.error("Failed to send bill:", err);
+            console.error("Send Error:", err); // Log the error
             alert('Failed to send bill.');
         }
     };
@@ -65,13 +63,19 @@ function MedicalPayments() {
         return meds.length > 0 ? meds.join(', ') : 'No items';
     }
 
-    if (loading) return <div>Loading...</div>;
+    if (loading && bills.length === 0) return <div>Loading...</div>;
 
     return (
         <div style={{ padding: '20px', maxWidth: '1200px', margin: 'auto' }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h1>Medical Payments - Manage Bills</h1>
-                <Link to="/doctor/dashboard">Back to Dashboard</Link>
+                <div>
+                    {/* --- FEATURE: ADDED REFRESH BUTTON --- */}
+                    <button onClick={fetchBills} disabled={loading} style={{marginRight: '15px'}}>
+                        {loading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                    <Link to="/doctor/dashboard">Back to Dashboard</Link>
+                </div>
             </header>
             {error && <p style={{color: 'red'}}>{error}</p>}
              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -101,7 +105,7 @@ function MedicalPayments() {
                                 </button>
                             </td>
                         </tr>
-                    )) : <tr><td colSpan="6" style={{textAlign: 'center', padding: '20px'}}>No pending medication bills found.</td></tr>}
+                    )) : <tr><td colSpan="6" style={{textAlign: 'center', padding: '20px'}}>No pending medication bills found. New bills will appear here after a prescription is submitted.</td></tr>}
                 </tbody>
             </table>
         </div>
