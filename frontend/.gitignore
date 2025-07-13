@@ -1,53 +1,29 @@
-# Byte-compiled / optimized / DLL files
+# --- General ---
+.DS_Store
+*.log
+*.swo
+*.swp
+
+# --- Python / Django ---
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual Environment
-backend/venv/
-.venv/
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Environment variables
-backend/.env
-.env
-.env.*
-
-# Django specific
-*.log
-local_settings.py
 db.sqlite3
-db.sqlite3-journal
-backend/media/
-backend/staticfiles/
+/media/
+/staticfiles/
 
-# Frontend node_modules
-frontend/node_modules/
+# CRITICAL: Ignore the virtual environment
+/backend/venv/
+
+# CRITICAL: Ignore environment variables file
+/backend/.env
+
+# --- Node.js / React / Vite ---
+# CRITICAL: Ignore all node_modules directories
+/frontend/node_modules/
 frontend/dist/
-frontend/.DS_Store
+frontend/.eslintcache
+npm-debug.log
+yarn-error.log
+
+# --- IDE Files (VS Code) ---
+.vscode/
