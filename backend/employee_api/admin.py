@@ -5,10 +5,10 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.translation import gettext_lazy as _
 from .models import (
     CustomUser, PatientProfile, DoctorProfile, Appointment, 
-    MedicalRecord, DiagnosticTest, MedicationBill # <-- Import new models
+    MedicalRecord, DiagnosticTest, MedicationBill, DoctorUnavailability # <-- Import new models
 )
 
-# ... (CustomUserAdmin, PatientProfileAdmin, DoctorProfileAdmin, AppointmentAdmin are unchanged) ...
+# ... (CustomUserAdmin, PatientProfileAdmin, DoctorProfileAdmin are unchanged) ...
 @admin.register(CustomUser)
 class CustomUserAdmin(BaseUserAdmin):
     list_display = BaseUserAdmin.list_display + ('role',)
@@ -26,10 +26,11 @@ class DoctorProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'specialization', 'years_of_experience')
     search_fields = ('user__username',)
 
+# --- UPDATED AppointmentAdmin ---
 @admin.register(Appointment)
 class AppointmentAdmin(admin.ModelAdmin):
-    list_display = ('id', 'patient', 'doctor', 'appointment_date', 'status')
-    list_filter = ('status', 'appointment_date', 'doctor__doctor_profile__specialization')
+    list_display = ('id', 'patient', 'doctor', 'appointment_date', 'status', 'is_emergency')
+    list_filter = ('status', 'appointment_date', 'is_emergency', 'doctor__doctor_profile__specialization')
     search_fields = ('patient__username', 'doctor__username')
 
 @admin.register(MedicalRecord)
@@ -37,7 +38,6 @@ class MedicalRecordAdmin(admin.ModelAdmin):
     list_display = ('id', 'appointment', 'patient', 'doctor', 'created_at')
     search_fields = ('patient__username', 'doctor__username')
 
-# --- NEW ADMIN REGISTRATIONS ---
 @admin.register(DiagnosticTest)
 class DiagnosticTestAdmin(admin.ModelAdmin):
     list_display = ('test_name', 'patient', 'doctor', 'cost', 'result', 'is_paid', 'is_sent_to_patient')
@@ -49,3 +49,9 @@ class MedicationBillAdmin(admin.ModelAdmin):
     list_display = ('appointment', 'patient', 'doctor', 'total_cost', 'is_paid', 'is_sent_to_patient')
     list_filter = ('is_paid', 'is_sent_to_patient')
     search_fields = ('patient__username', 'doctor__username')
+
+# --- NEW ADMIN REGISTRATION ---
+@admin.register(DoctorUnavailability)
+class DoctorUnavailabilityAdmin(admin.ModelAdmin):
+    list_display = ('doctor', 'date')
+    search_fields = ('doctor__username',)

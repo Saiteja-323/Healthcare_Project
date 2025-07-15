@@ -1,10 +1,12 @@
 // --- CORRECTED FILE: frontend/src/DoctorDashboard.jsx ---
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { format } from 'date-fns';
+import { format, isEqual, startOfDay } from 'date-fns';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 import TreatmentFormModal from './TreatmentFormModal';
 import CancelAppointmentModal from './CancelAppointmentModal';
 
@@ -14,13 +16,37 @@ const parseDateAsLocal = (dateString) => {
     return new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
 };
 
+// This function groups appointments by status, and then by slot for active ones
+const groupAppointments = (appointments) => {
+    const grouped = {
+        pending: {},
+        accepted: {},
+    };
+
+    appointments.forEach(apt => {
+        const slotKey = `${format(parseDateAsLocal(apt.appointment_date), 'yyyy-MM-dd')}@${apt.time_slot}`;
+        if (apt.status === 'pending') {
+            if (!grouped.pending[slotKey]) grouped.pending[slotKey] = [];
+            grouped.pending[slotKey].push(apt);
+        } else if (apt.status === 'accepted') {
+            if (!grouped.accepted[slotKey]) grouped.accepted[slotKey] = [];
+            grouped.accepted[slotKey].push(apt);
+        }
+    });
+
+    return grouped;
+};
+
 function DoctorDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     
-    const [pendingAppointments, setPendingAppointments] = useState([]);
-    const [acceptedAppointments, setAcceptedAppointments] = useState([]);
+    const [appointments, setAppointments] = useState([]);
     const [completedAppointments, setCompletedAppointments] = useState([]);
+    
+    // --- FIX: State now stores the full unavailability object {id, date} ---
+    const [unavailability, setUnavailability] = useState([]);
+    
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -33,145 +59,223 @@ function DoctorDashboard() {
                 navigate('/doctor/complete-profile');
                 return; 
             }
-            fetchAllAppointments();
+            fetchAllData();
         }
     }, [user, navigate]);
-
-    const fetchAllAppointments = () => {
+    
+    const fetchAllData = () => {
         setLoading(true);
         setError('');
         Promise.all([
-            axios.get('/api/appointments/'),      // Fetches pending and accepted
-            axios.get('/api/appointments/history/') // Fetches completed
-        ]).then(([activeRes, completedRes]) => {
-            // FIX: Ensure data is an array before filtering
-            const activeData = Array.isArray(activeRes.data) ? activeRes.data : [];
-            const completedData = Array.isArray(completedRes.data) ? completedRes.data : [];
-
-            setPendingAppointments(activeData.filter(apt => apt.status === 'pending'));
-            // --- BUG FIX: Was `active.data`, corrected to `activeRes.data` (via activeData) ---
-            setAcceptedAppointments(activeData.filter(apt => apt.status === 'accepted'));
-            setCompletedAppointments(completedData);
+            axios.get('/api/appointments/'),
+            axios.get('/api/appointments/history/'),
+            axios.get('/api/doctor/unavailability/')
+        ]).then(([activeRes, completedRes, unavailRes]) => {
+            setAppointments(Array.isArray(activeRes.data) ? activeRes.data : []);
+            setCompletedAppointments(Array.isArray(completedRes.data) ? completedRes.data : []);
+            // --- FIX: Store the full object, not just the date ---
+            setUnavailability(Array.isArray(unavailRes.data) ? unavailRes.data : []);
         }).catch(() => {
-            setError('Failed to fetch appointments.');
+            setError('Failed to fetch dashboard data.');
         }).finally(() => {
             setLoading(false);
         });
     };
     
+    const groupedAppointments = useMemo(() => groupAppointments(appointments), [appointments]);
+
     const handleAccept = async (appointmentId) => {
         try {
             await axios.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'accept' });
-            fetchAllAppointments(); // Refresh all lists
-        } catch {
-            alert('Failed to accept appointment.');
+            fetchAllData(); 
+        } catch { alert('Failed to accept appointment.'); }
+    };
+    
+    const handleBulkCancel = async (slotKey) => {
+        const [date, slot] = slotKey.split('@');
+        if (window.confirm(`Are you sure you want to cancel ALL appointments for ${slot} on ${date}? This will notify all patients in the slot.`)) {
+            try {
+                await axios.post('/api/appointments/bulk-cancel/', { 
+                    appointment_date: date, 
+                    time_slot: slot,
+                    suggestion_message: `The doctor's slot at ${slot} on ${date} has been cancelled.`
+                });
+                alert('Slot cancelled successfully.');
+                fetchAllData();
+            } catch (err) {
+                alert(err.response?.data?.error || 'Failed to cancel the slot.');
+            }
+        }
+    };
+    
+    // --- FIX: Corrected unavailability logic ---
+    const handleUnavailabilityChange = async (clickedDate) => {
+        const dateStr = format(startOfDay(clickedDate), 'yyyy-MM-dd');
+        const existingRecord = unavailability.find(d => d.date === dateStr);
+
+        try {
+            if (existingRecord) {
+                // If the date exists, delete it
+                await axios.delete(`/api/doctor/unavailability/${existingRecord.id}/`);
+            } else {
+                // If the date does not exist, add it
+                await axios.post('/api/doctor/unavailability/', { date: dateStr });
+            }
+            // Refresh all data from the server to ensure UI consistency
+            fetchAllData();
+        } catch (err) {
+            console.error("Unavailability update error:", err);
+            alert('Failed to update unavailability status.');
         }
     };
 
-    const handleOpenCancelModal = (appointment) => setCancelModal({ isOpen: true, appointment });
+    // Helper to pass an array of Date objects to the calendar for highlighting
+    const unavailableDateObjects = useMemo(() => {
+        return unavailability.map(d => parseDateAsLocal(d.date));
+    }, [unavailability]);
+
+    // Function to style the calendar tiles
+    const tileClassName = ({ date, view }) => {
+        if (view === 'month' && unavailableDateObjects.some(d => isEqual(startOfDay(d), startOfDay(date)))) {
+            return 'unavailable-tile';
+        }
+        return null;
+    };
+    
     const handleOpenTreatmentModal = (appointment) => setTreatmentModal({ isOpen: true, appointment });
     const handleLogout = () => { logout(); navigate('/login'); };
 
-    if (loading) {
-        return <div>Loading Doctor Dashboard...</div>;
-    }
+    if (loading) return <div>Loading Doctor Dashboard...</div>;
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-            {cancelModal.isOpen && <CancelAppointmentModal appointment={cancelModal.appointment} onClose={() => setCancelModal({ isOpen: false, appointment: null })} onSuccess={fetchAllAppointments} />}
-            {treatmentModal.isOpen && <TreatmentFormModal appointment={treatmentModal.appointment} onClose={() => setTreatmentModal({ isOpen: false, appointment: null })} onSuccess={fetchAllAppointments} />}
+            <style>{`.unavailable-tile { background-color: #ffcdd2 !important; border-radius: 50%; }`}</style>
+            
+            {treatmentModal.isOpen && <TreatmentFormModal appointment={treatmentModal.appointment} onClose={() => setTreatmentModal({ isOpen: false, appointment: null })} onSuccess={fetchAllData} />}
+            {cancelModal.isOpen && <CancelAppointmentModal appointment={cancelModal.appointment} onClose={() => setCancelModal({ isOpen: false, appointment: null })} onSuccess={fetchAllData} />}
 
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', paddingBottom: '15px', borderBottom: '1px solid #eee' }}>
-                <h1>Doctor's Dashboard</h1>
+            <header style={styles.header}>
+                <h1>{user?.first_name} {user?.last_name} Hospital</h1>
                 <div>
                     <Link to="/doctor/diagnostic-center" style={styles.navLink}>Manage Tests</Link>
                     <Link to="/doctor/medical-payments" style={styles.navLink}>Manage Payments</Link>
-                    <span style={{ marginRight: '15px', marginLeft: '15px' }}>Hi, Dr. {user?.last_name || user?.username}!</span>
                     <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
                 </div>
             </header>
 
             {error && <p style={{ color: 'red' }}>{error}</p>}
             
-            <section>
-                <h2>Pending Appointment Requests ({pendingAppointments.length})</h2>
-                {pendingAppointments.length > 0 ? (
-                    <table style={styles.table}>
-                        <thead style={styles.thead}><tr><th style={styles.th}>Patient</th><th style={styles.th}>Symptoms</th><th style={styles.th}>Date & Time</th><th style={styles.th}>Attached Report</th><th style={styles.th}>Actions</th></tr></thead>
-                        <tbody>
-                            {pendingAppointments.map(apt => (
-                                <tr key={apt.id}>
-                                    <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
-                                    <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
-                                    <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')} at {apt.time_slot}</td>
-                                    <td style={styles.td}>{apt.initial_report ? <a href={apt.initial_report} target="_blank" rel="noopener noreferrer">View Report</a> : 'None'}</td>
-                                    <td style={{...styles.td, textAlign: 'center'}}>
-                                        <button onClick={() => handleAccept(apt.id)} style={{...styles.button, ...styles.acceptButton}}>Accept</button>
-                                        <button onClick={() => handleOpenCancelModal(apt)} style={{...styles.button, ...styles.cancelButton}}>Cancel</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : <p>No new appointment requests.</p>}
-            </section>
+            <div style={styles.mainGrid}>
+                {/* APPOINTMENTS SECTION */}
+                <div style={styles.appointmentsColumn}>
+                    <section>
+                        <h2>Pending Appointment Requests</h2>
+                        {Object.keys(groupedAppointments.pending).length > 0 ? Object.entries(groupedAppointments.pending).map(([slotKey, apts]) => (
+                            <div key={slotKey} style={styles.slotGroup}>
+                                <div style={styles.slotHeader}>
+                                    <h4>{format(parseDateAsLocal(apts[0].appointment_date), 'EEE, MMM dd, yyyy')} at {apts[0].time_slot}</h4>
+                                </div>
+                                <table style={styles.table}>
+                                    <tbody>
+                                        {apts.map(apt => (
+                                            <tr key={apt.id}>
+                                                <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
+                                                <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
+                                                <td style={{...styles.td, textAlign: 'center'}}>
+                                                    <button onClick={() => handleAccept(apt.id)} style={{...styles.button, ...styles.acceptButton}}>Accept</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )) : <p>No new appointment requests.</p>}
+                    </section>
 
-            <section style={{marginTop: '40px'}}>
-                <h2>Upcoming Confirmed Appointments ({acceptedAppointments.length})</h2>
-                {acceptedAppointments.length > 0 ? (
-                    <table style={styles.table}>
-                        <thead style={styles.thead}><tr><th style={styles.th}>Patient</th><th style={styles.th}>Symptoms</th><th style={styles.th}>Date & Time</th><th style={styles.th}>Medical History</th><th style={styles.th}>Action</th></tr></thead>
-                        <tbody>
-                            {acceptedAppointments.map(apt => (
-                                <tr key={apt.id}>
-                                    <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
-                                    <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
-                                    <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')} at {apt.time_slot}</td>
-                                    <td style={styles.td}>{apt.patient?.patient_profile?.medical_history || 'N/A'}</td>
-                                    <td style={{...styles.td, textAlign: 'center'}}>
-                                        <button onClick={() => handleOpenTreatmentModal(apt)} style={{...styles.button, ...styles.completeButton}}>Finalize & Prescribe</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : <p>No upcoming appointments.</p>}
-            </section>
+                    <section style={{marginTop: '40px'}}>
+                        <h2>Upcoming Confirmed Appointments</h2>
+                        {Object.keys(groupedAppointments.accepted).length > 0 ? Object.entries(groupedAppointments.accepted).map(([slotKey, apts]) => (
+                            <div key={slotKey} style={styles.slotGroup}>
+                                <div style={styles.slotHeader}>
+                                    <h4>{format(parseDateAsLocal(apts[0].appointment_date), 'EEE, MMM dd, yyyy')} at {apts[0].time_slot}</h4>
+                                    <button onClick={() => handleBulkCancel(slotKey)} style={{...styles.button, ...styles.cancelButton}}>Cancel Slot</button>
+                                </div>
+                                <table style={styles.table}>
+                                    <thead><tr><th style={styles.th}>Patient</th><th style={styles.th}>Symptoms</th><th style={styles.th}>Action</th></tr></thead>
+                                    <tbody>
+                                        {apts.map(apt => (
+                                            <tr key={apt.id} style={apt.is_emergency ? {backgroundColor: '#fff0f1'} : {}}>
+                                                <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}
+                                                    {apt.is_emergency && <span style={{color: 'red', fontWeight: 'bold'}}> 🔴 Emergency!!!</span>}
+                                                </td>
+                                                <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
+                                                <td style={{...styles.td, textAlign: 'center'}}>
+                                                    <button onClick={() => handleOpenTreatmentModal(apt)} style={{...styles.button, ...styles.completeButton}}>Finalize & Prescribe</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )) : <p>No upcoming appointments.</p>}
+                    </section>
+                </div>
 
-            <section style={{marginTop: '40px'}}>
-                <h2>Completed Appointments History ({completedAppointments.length})</h2>
-                {completedAppointments.length > 0 ? (
-                     <table style={styles.table}>
-                        <thead style={styles.thead}><tr><th style={styles.th}>Patient</th><th style={styles.th}>Date</th><th style={styles.th}>View Prescription</th></tr></thead>
-                        <tbody>
-                            {completedAppointments.map(apt => (
-                                <tr key={apt.id}>
-                                    <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
-                                    <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'EEE, MMM dd, yyyy')}</td>
-                                    <td style={styles.td}>
-                                        <Link to="/patient/history">View in History</Link>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : <p>No completed appointments in your history yet.</p>}
-            </section>
+                {/* SIDEBAR SECTION */}
+                <div style={styles.sidebarColumn}>
+                    <section>
+                        <h2>Unavailability Dates</h2>
+                        <Calendar
+                            onClickDay={handleUnavailabilityChange}
+                            value={unavailableDateObjects}
+                            minDate={new Date()}
+                            tileClassName={tileClassName}
+                        />
+                        <p style={{fontSize: '0.8em', color: '#666', marginTop: '10px'}}>Click a date to mark it as unavailable. Click an unavailable date again to remove it.</p>
+                    </section>
+                    
+                    <section style={{marginTop: '40px'}}>
+                        <h2>Completed Appointments History</h2>
+                        {completedAppointments.length > 0 ? (
+                            <table style={styles.table}>
+                                <thead style={styles.thead}><tr><th style={styles.th}>Patient</th><th style={styles.th}>Date</th><th style={styles.th}>View</th></tr></thead>
+                                <tbody>
+                                    {completedAppointments.map(apt => (
+                                        <tr key={apt.id}>
+                                            <td style={styles.td}>{apt.patient?.first_name} {apt.patient?.last_name}</td>
+                                            <td style={styles.td}>{format(parseDateAsLocal(apt.appointment_date), 'MMM dd, yyyy')}</td>
+                                            <td style={styles.td}>
+                                                <Link to={`/doctor/history/${apt.id}`}>View Details</Link>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : <p>No completed appointments yet.</p>}
+                    </section>
+                </div>
+            </div>
         </div>
     );
 }
 
 const styles = {
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', paddingBottom: '15px', borderBottom: '1px solid #eee' },
+    mainGrid: { display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px' },
+    appointmentsColumn: {},
+    sidebarColumn: { borderLeft: '1px solid #eee', paddingLeft: '30px' },
     navLink: { padding: '8px 15px', backgroundColor: '#17a2b8', color: 'white', textDecoration: 'none', borderRadius: '4px', marginRight: '10px' },
-    logoutButton: { padding: '8px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' },
-    table: { width: '100%', borderCollapse: 'collapse', marginTop: '10px' },
+    logoutButton: { padding: '8px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+    table: { width: '100%', borderCollapse: 'collapse' },
     thead: { backgroundColor: '#f8f9fa' },
     th: { border: '1px solid #ddd', padding: '12px', textAlign: 'left' },
-    td: { border: '1px solid #ddd', padding: '10px' },
+    td: { border: '1px solid #ddd', padding: '10px', verticalAlign: 'middle' },
     button: { border: 'none', padding: '6px 12px', borderRadius: '4px', color: 'white', cursor: 'pointer', marginRight: '5px'},
     acceptButton: { backgroundColor: '#28a745' },
     cancelButton: { backgroundColor: '#ffc107', color: 'black' },
-    completeButton: { backgroundColor: '#007bff' }
+    completeButton: { backgroundColor: '#007bff' },
+    slotGroup: { border: '1px solid #e0e0e0', borderRadius: '8px', marginBottom: '20px', overflow: 'hidden' },
+    slotHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '10px 15px', borderBottom: '1px solid #e0e0e0' },
 };
 
 export default DoctorDashboard;

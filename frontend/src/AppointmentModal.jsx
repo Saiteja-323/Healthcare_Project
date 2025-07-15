@@ -1,9 +1,10 @@
-// frontend/src/AppointmentModal.jsx
+// --- CORRECTED FILE: frontend/src/AppointmentModal.jsx ---
+
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { format } from 'date-fns';
+import { format, isEqual, startOfDay } from 'date-fns';
 
 const timeSlots = [
     { key: '09:30-10:30', label: '9:30 AM - 10:30 AM' },
@@ -12,36 +13,66 @@ const timeSlots = [
     { key: '16:00-18:00', label: '4:00 PM - 6:00 PM' },
 ];
 
-function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
+const parseDateAsLocal = (dateString) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    return new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
+};
+
+function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate, isEmergency }) {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [selectedSlot, setSelectedSlot] = useState(null);
     const [initialReport, setInitialReport] = useState(null);
     const [availability, setAvailability] = useState({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    
+    // --- FIX: State to hold all unavailable dates for visual disabling ---
+    const [unavailableDates, setUnavailableDates] = useState([]);
 
     const minBookingDate = useMemo(() => {
         const today = new Date();
-        const restricted = restrictedUntilDate ? new Date(restrictedUntilDate) : today;
+        const restricted = restrictedUntilDate ? parseDateAsLocal(restrictedUntilDate) : today;
         return restricted > today ? restricted : today;
     }, [restrictedUntilDate]);
 
+    // Fetch all unavailable dates when the modal mounts
     useEffect(() => {
+        const fetchUnavailability = async () => {
+            try {
+                const res = await axios.get(`/api/doctor/unavailability/?doctor_id=${doctor.id}`);
+                const dates = (Array.isArray(res.data) ? res.data : []).map(d => parseDateAsLocal(d.date));
+                setUnavailableDates(dates);
+            } catch (err) {
+                console.error("Could not fetch unavailability", err);
+            }
+        };
+        fetchUnavailability();
+    }, [doctor.id]);
+
+    // Fetch slot availability whenever the selected date changes
+    useEffect(() => {
+        const dateToFetch = selectedDate < minBookingDate ? minBookingDate : selectedDate;
         if (selectedDate < minBookingDate) {
             setSelectedDate(minBookingDate);
         }
-        fetchAvailability(selectedDate);
-    }, [selectedDate, doctor, minBookingDate]);
+        fetchSlotAvailability(dateToFetch);
+    }, [selectedDate, doctor.id, minBookingDate]);
 
-    const fetchAvailability = async (date) => {
-        setLoading(true);
-        setError('');
+    const fetchSlotAvailability = async (date) => {
+        setLoading(true); setError('');
         try {
             const formattedDate = format(date, 'yyyy-MM-dd');
             const response = await axios.get(`/api/appointments/availability/?doctor_id=${doctor.id}&date=${formattedDate}`);
-            setAvailability(response.data);
-        } catch {
-            setError('Failed to fetch slot availability.');
+            
+            if (response.data.unavailable) {
+                setError(response.data.message || 'The doctor is not available on this day.');
+                setAvailability({});
+            } else {
+                setAvailability(response.data);
+            }
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to fetch slot availability.');
         } finally {
             setLoading(false);
         }
@@ -54,16 +85,15 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
 
     const handleSubmit = async () => {
         if (!selectedSlot) {
-            alert('Please select a time slot.');
-            return;
+            alert('Please select a time slot.'); return;
         }
-        setLoading(true);
-        setError('');
+        setLoading(true); setError('');
 
         const formData = new FormData();
         formData.append('doctor_id', doctor.id);
         formData.append('appointment_date', format(selectedDate, 'yyyy-MM-dd'));
         formData.append('time_slot', selectedSlot);
+        formData.append('is_emergency', isEmergency);
         if (initialReport) {
             formData.append('initial_report', initialReport);
         }
@@ -72,11 +102,12 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
             await axios.post('/api/appointments/', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            alert('Appointment request sent successfully!');
+            alert(`Appointment request sent successfully!`);
             onSuccess();
             onClose();
         } catch (err) {
-            const messages = Object.values(err.response?.data || {}).flat().join(' ') || 'Failed to book appointment.';
+            const errorData = err.response?.data;
+            const messages = errorData ? (Object.values(errorData).flat().join(' ') || 'Failed to book appointment.') : 'An unknown error occurred.';
             setError(messages);
         } finally {
             setLoading(false);
@@ -85,25 +116,36 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
     
     const handleSlotSelect = (slotKey) => {
         const count = availability[slotKey] || 0;
-        if (count >= 5) { alert('Slot is filled'); return; }
+        if (count >= 5 && !isEmergency) { alert('Slot is filled'); return; }
         setSelectedSlot(slotKey);
     };
 
     const getSlotStyle = (slotKey) => {
         const count = availability[slotKey] || 0;
         let backgroundColor = '#4CAF50';
-        if (count >= 4) backgroundColor = '#ffc107';
-        if (count >= 5) backgroundColor = '#f44336';
-        return { backgroundColor, cursor: count >= 5 ? 'not-allowed' : 'pointer', border: selectedSlot === slotKey ? '3px solid #000' : 'none' };
+        if (count >= 4 && !isEmergency) backgroundColor = '#ffc107';
+        if (count >= 5 && !isEmergency) backgroundColor = '#f44336';
+        const isFull = count >= 5 && !isEmergency;
+        return { backgroundColor, cursor: isFull ? 'not-allowed' : 'pointer', border: selectedSlot === slotKey ? '3px solid #000' : 'none' };
     };
 
+    // --- FIX: Function to visually disable tiles on the calendar ---
+    const tileDisabled = ({ date, view }) => {
+        if (view === 'month') {
+            return unavailableDates.some(unavailableDate => 
+                isEqual(startOfDay(date), startOfDay(unavailableDate))
+            );
+        }
+        return false;
+    };
+
+    const isSelectedDateUnavailable = tileDisabled({ date: selectedDate, view: 'month' });
+
     return (
-        // --- FIX: Added onClick to the overlay to close the modal ---
         <div style={styles.overlay} onClick={onClose}>
             <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        {/* --- END OF FIX --- */}
-                <button onClick={onClose} style={styles.closeButton}>×</button>
-                <h3>Book Appointment with Dr. {doctor.first_name} {doctor.last_name}</h3>
+                <button type="button" onClick={onClose} style={styles.closeButton}>×</button>
+                <h3>{isEmergency ? "Emergency Booking" : "Book Appointment"} with Dr. {doctor.first_name} {doctor.last_name}</h3>
                 {error && <p style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
                 
                 <div style={styles.container}>
@@ -113,17 +155,25 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
                             onChange={handleDateChange}
                             value={selectedDate}
                             minDate={minBookingDate}
+                            tileDisabled={tileDisabled} // Use the disabling function
                         />
-                        {restrictedUntilDate && new Date(restrictedUntilDate) > new Date() && <p style={{color: 'orange', fontSize: '0.9em', marginTop: '10px'}}>Booking is available from {format(minBookingDate, 'MMM dd, yyyy')}.</p>}
+                         {isEmergency && <p style={{color: 'red', fontSize: '0.9em', marginTop: '10px'}}>Emergency booking will override slot limits.</p>}
+                         {restrictedUntilDate && new Date(restrictedUntilDate) > new Date() && <p style={{color: 'orange', fontSize: '0.9em', marginTop: '10px'}}>Booking is available from {format(minBookingDate, 'MMM dd, yyyy')}.</p>}
                     </div>
                     <div style={styles.slotsContainer}>
                         <h4>Select a Time Slot for {format(selectedDate, 'MMM dd')}</h4>
-                        {loading ? <p>Loading slots...</p> : (
-                            timeSlots.map(slot => (
-                                <button key={slot.key} style={{ ...styles.slotButton, ...getSlotStyle(slot.key) }} onClick={() => handleSlotSelect(slot.key)} disabled={availability[slot.key] >= 5}>
-                                    {slot.label} ({availability[slot.key] || 0}/5 available)
-                                </button>
-                            ))
+                        {loading ? <p>Loading slots...</p> : isSelectedDateUnavailable ? (
+                             <p style={{color: 'red'}}>❌ The doctor is unavailable on that date.</p>
+                        ) : (
+                            timeSlots.map(slot => {
+                                const count = availability[slot.key] || 0;
+                                const isFull = count >= 5 && !isEmergency;
+                                return (
+                                    <button key={slot.key} style={{ ...styles.slotButton, ...getSlotStyle(slot.key) }} onClick={() => handleSlotSelect(slot.key)} disabled={isFull}>
+                                        {slot.label} ({isEmergency ? 'Emergency Priority' : `${count}/5 Booked`})
+                                    </button>
+                                );
+                            })
                         )}
                         <div style={{marginTop: '20px'}}>
                             <label htmlFor="report-upload">Upload medical documents (optional):</label>
@@ -132,7 +182,7 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate }) {
                     </div>
                 </div>
 
-                <button onClick={handleSubmit} disabled={!selectedSlot || loading} style={styles.confirmButton}>
+                <button onClick={handleSubmit} disabled={!selectedSlot || loading || isSelectedDateUnavailable} style={styles.confirmButton}>
                     {loading ? 'Sending Request...' : 'Confirm Appointment Request'}
                 </button>
             </div>
@@ -147,7 +197,7 @@ const styles = {
     container: { display: 'flex', gap: '20px', marginTop: '20px', flexWrap: 'wrap' },
     calendarContainer: { flex: 1, minWidth: '300px' },
     slotsContainer: { flex: 1, display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '300px' },
-    slotButton: { color: 'white', padding: '12px', borderRadius: '5px', textAlign: 'center' },
+    slotButton: { color: 'white', padding: '12px', borderRadius: '5px', textAlign: 'center', border: 'none' },
     confirmButton: { width: '100%', padding: '12px', marginTop: '20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer' }
 };
 

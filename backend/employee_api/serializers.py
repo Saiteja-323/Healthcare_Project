@@ -4,7 +4,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     CustomUser, PatientProfile, DoctorProfile, Appointment, 
-    MedicalRecord, DiagnosticTest, MedicationBill
+    MedicalRecord, DiagnosticTest, MedicationBill, DoctorUnavailability # <-- Import new model
 )
 import json
 
@@ -53,108 +53,95 @@ class DoctorListSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ['id', 'first_name', 'last_name', 'doctor_profile']
 
-# --- UPDATED MedicalRecordSerializer ---
 class MedicalRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicalRecord
         fields = ['medication_details', 'prescribed_tests', 'created_at']
 
-# --- NEW DiagnosticTestSerializer ---
 class DiagnosticTestSerializer(serializers.ModelSerializer):
     appointment_details = serializers.SerializerMethodField()
-
     class Meta:
         model = DiagnosticTest
         fields = ['id', 'appointment', 'patient', 'doctor', 'test_name', 'cost', 'result', 'is_sent_to_patient', 'is_paid', 'created_at', 'appointment_details']
         read_only_fields = ['patient', 'doctor', 'appointment']
-
     def get_appointment_details(self, obj):
-        # Provide context for the frontend
-        return {
-            'id': obj.appointment.id,
-            'date': obj.appointment.appointment_date,
-            'patient_name': obj.patient.get_full_name() or obj.patient.username
-        }
+        return { 'id': obj.appointment.id, 'date': obj.appointment.appointment_date, 'patient_name': obj.patient.get_full_name() or obj.patient.username }
         
-# --- NEW MedicationBillSerializer ---
 class MedicationBillSerializer(serializers.ModelSerializer):
     appointment_details = serializers.SerializerMethodField()
     medication_details = serializers.SerializerMethodField()
-
     class Meta:
         model = MedicationBill
         fields = ['id', 'appointment', 'patient', 'doctor', 'total_cost', 'is_sent_to_patient', 'is_paid', 'created_at', 'appointment_details', 'medication_details']
         read_only_fields = ['patient', 'doctor', 'appointment', 'medication_details']
-
     def get_appointment_details(self, obj):
-        return {
-            'id': obj.appointment.id,
-            'date': obj.appointment.appointment_date,
-            'patient_name': obj.patient.get_full_name() or obj.patient.username
-        }
-        
+        return { 'id': obj.appointment.id, 'date': obj.appointment.appointment_date, 'patient_name': obj.patient.get_full_name() or obj.patient.username }
     def get_medication_details(self, obj):
-        # Get medication details from the related medical record
         return obj.appointment.medical_record.medication_details if hasattr(obj.appointment, 'medical_record') else {}
 
+# --- NEW DoctorUnavailabilitySerializer ---
+class DoctorUnavailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorUnavailability
+        fields = ['id', 'date']
+
+# --- UPDATED AppointmentSerializer ---
 class AppointmentSerializer(serializers.ModelSerializer):
     patient = UserSerializer(read_only=True)
     doctor = UserSerializer(read_only=True)
     doctor_id = serializers.IntegerField(write_only=True, required=False)
     medical_record = MedicalRecordSerializer(read_only=True)
-    # --- NEW ---
     diagnostic_tests = DiagnosticTestSerializer(many=True, read_only=True)
     medication_bill = MedicationBillSerializer(read_only=True)
+    
+    # is_emergency is now a field that can be written to
+    is_emergency = serializers.BooleanField(required=False)
 
     class Meta:
         model = Appointment
         fields = [
             'id', 'patient', 'doctor', 'doctor_id', 'appointment_date', 'time_slot', 
             'created_at', 'status', 'initial_report', 'suggestion_message', 
-            'suggestion_date', 'medical_record', 'diagnostic_tests', 'medication_bill' # Added new fields
+            'suggestion_date', 'medical_record', 'diagnostic_tests', 'medication_bill',
+            'is_emergency' # <-- ADDED
         ]
         read_only_fields = ['status']
         validators = []
 
     def create(self, validated_data):
-        # ... (create method logic remains the same)
         patient_user = self.context['request'].user
         doctor_id = validated_data.pop('doctor_id')
+        is_emergency = validated_data.get('is_emergency', False)
+
         try:
             doctor_user = CustomUser.objects.get(id=doctor_id, role='doctor')
         except CustomUser.DoesNotExist:
             raise serializers.ValidationError("Doctor not found.")
         
+        # Automatically accept emergency appointments
+        if is_emergency:
+            validated_data['status'] = 'accepted'
+        
         if Appointment.objects.filter(patient=patient_user, doctor=doctor_user, appointment_date=validated_data['appointment_date'], time_slot=validated_data['time_slot']).exists():
             raise serializers.ValidationError("You have already booked or requested this exact time slot.")
+        
         appointment = Appointment.objects.create(patient=patient_user, doctor=doctor_user, **validated_data)
         return appointment
 
-# --- HEAVILY UPDATED Serializer for Doctor's Treatment Form ---
 class TreatmentFormSerializer(serializers.Serializer):
-    # Expects JSON strings from FormData
     medication_details = serializers.CharField(required=False, allow_blank=True)
     prescribed_tests = serializers.CharField(required=False, allow_blank=True)
-
     def validate_medication_details(self, value):
-        if not value:
-            return {}
+        if not value: return {}
         try:
             data = json.loads(value)
-            if not isinstance(data, dict):
-                raise serializers.ValidationError("Medication details should be an object.")
-            # Further validation can be added here (e.g., check structure)
+            if not isinstance(data, dict): raise serializers.ValidationError("Medication details should be an object.")
             return data
-        except json.JSONDecodeError:
-            raise serializers.ValidationError("Invalid JSON format for medication details.")
-
+        except json.JSONDecodeError: raise serializers.ValidationError("Invalid JSON format for medication details.")
     def validate_prescribed_tests(self, value):
-        if not value:
-            return []
+        if not value: return []
         try:
             data = json.loads(value)
-            if not isinstance(data, list) or not all(isinstance(i, str) for i in data):
-                raise serializers.ValidationError("Prescribed tests should be a list of strings.")
+            if not isinstance(data, list) or not all(isinstance(i, str) for i in data): raise serializers.ValidationError("Prescribed tests should be a list of strings.")
             return data
-        except json.JSONDecodeError:
-            raise serializers.ValidationError("Invalid JSON format for prescribed tests.")
+        except json.JSONDecodeError: raise serializers.ValidationError("Invalid JSON format for prescribed tests.")

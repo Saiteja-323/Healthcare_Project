@@ -14,11 +14,16 @@ from employee_api.views import (
     CompleteAppointmentView,
     MedicalHistoryView,
     DoctorAppointmentHistoryView,
-    # --- NEW IMPORTS ---
     DoctorDiagnosticCenterView, DoctorManageDiagnosticTestView,
     DoctorMedicalPaymentsView, DoctorManageMedicalBillView,
     PatientDiagnosticCenterView, PatientPayForTestView,
     PatientMedicalPaymentsView, PatientPayForBillView,
+    
+    # --- NEW IMPORTS ---
+    BulkCancelAppointmentsView,
+    DoctorUnavailabilityView,
+    DoctorUnavailabilityDeleteView,
+    AppointmentHistoryDetailView,
 )
 
 urlpatterns = [
@@ -41,16 +46,20 @@ urlpatterns = [
     path('api/appointments/<int:pk>/complete/', CompleteAppointmentView.as_view(), name='appointment-complete'),
     
     # History
-    path('api/medical-history/', MedicalHistoryView.as_view(), name='medical-history'),
-    path('api/appointments/history/', DoctorAppointmentHistoryView.as_view(), name='doctor-appointment-history'),
-
-    # --- NEW DOCTOR URLS ---
+    path('api/medical-history/', MedicalHistoryView.as_view(), name='patient-medical-history'), # Patient history list
+    path('api/appointments/history/', DoctorAppointmentHistoryView.as_view(), name='doctor-appointment-history'), # Doctor history list
+    
+    # --- NEW/UPDATED DOCTOR URLS ---
+    path('api/appointments/history/<int:pk>/', AppointmentHistoryDetailView.as_view(), name='doctor-appointment-detail'),
+    path('api/appointments/bulk-cancel/', BulkCancelAppointmentsView.as_view(), name='appointment-bulk-cancel'),
+    path('api/doctor/unavailability/', DoctorUnavailabilityView.as_view(), name='doctor-unavailability-list-create'),
+    path('api/doctor/unavailability/<int:pk>/', DoctorUnavailabilityDeleteView.as_view(), name='doctor-unavailability-delete'),
     path('api/doctor/diagnostic-center/', DoctorDiagnosticCenterView.as_view(), name='doctor-diagnostic-center'),
     path('api/doctor/diagnostic-center/<int:pk>/manage/', DoctorManageDiagnosticTestView.as_view(), name='doctor-manage-test'),
     path('api/doctor/medical-payments/', DoctorMedicalPaymentsView.as_view(), name='doctor-medical-payments'),
     path('api/doctor/medical-payments/<int:pk>/manage/', DoctorManageMedicalBillView.as_view(), name='doctor-manage-bill'),
 
-    # --- NEW PATIENT URLS ---
+    # --- PATIENT URLS ---
     path('api/patient/diagnostic-center/', PatientDiagnosticCenterView.as_view(), name='patient-diagnostic-center'),
     path('api/patient/diagnostic-center/pay/<int:appointment_id>/', PatientPayForTestView.as_view(), name='patient-pay-for-test'),
     path('api/patient/medical-payments/', PatientMedicalPaymentsView.as_view(), name='patient-medical-payments'),
