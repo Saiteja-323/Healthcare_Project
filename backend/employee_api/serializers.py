@@ -1,14 +1,13 @@
-# --- UPDATED FILE: backend/employee_api/serializers.py ---
+# --- CORRECTED FILE: backend/employee_api/serializers.py ---
 
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import (
     CustomUser, PatientProfile, DoctorProfile, Appointment, 
-    MedicalRecord, DiagnosticTest, MedicationBill, DoctorUnavailability # <-- Import new model
+    MedicalRecord, DiagnosticTest, MedicationBill, DoctorUnavailability
 )
 import json
 
-# ... (PatientProfileSerializer, DoctorProfileSerializer, UserRegistrationSerializer, UserSerializer, LoginSerializer, DoctorListSerializer remain unchanged) ...
 class PatientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = PatientProfile
@@ -79,13 +78,11 @@ class MedicationBillSerializer(serializers.ModelSerializer):
     def get_medication_details(self, obj):
         return obj.appointment.medical_record.medication_details if hasattr(obj.appointment, 'medical_record') else {}
 
-# --- NEW DoctorUnavailabilitySerializer ---
 class DoctorUnavailabilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorUnavailability
         fields = ['id', 'date']
 
-# --- UPDATED AppointmentSerializer ---
 class AppointmentSerializer(serializers.ModelSerializer):
     patient = UserSerializer(read_only=True)
     doctor = UserSerializer(read_only=True)
@@ -93,8 +90,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
     medical_record = MedicalRecordSerializer(read_only=True)
     diagnostic_tests = DiagnosticTestSerializer(many=True, read_only=True)
     medication_bill = MedicationBillSerializer(read_only=True)
-    
-    # is_emergency is now a field that can be written to
     is_emergency = serializers.BooleanField(required=False)
 
     class Meta:
@@ -103,7 +98,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
             'id', 'patient', 'doctor', 'doctor_id', 'appointment_date', 'time_slot', 
             'created_at', 'status', 'initial_report', 'suggestion_message', 
             'suggestion_date', 'medical_record', 'diagnostic_tests', 'medication_bill',
-            'is_emergency' # <-- ADDED
+            'is_emergency'
         ]
         read_only_fields = ['status']
         validators = []
@@ -118,7 +113,6 @@ class AppointmentSerializer(serializers.ModelSerializer):
         except CustomUser.DoesNotExist:
             raise serializers.ValidationError("Doctor not found.")
         
-        # Automatically accept emergency appointments
         if is_emergency:
             validated_data['status'] = 'accepted'
         

@@ -1,4 +1,4 @@
-// --- CORRECTED FILE: frontend/src/DoctorDashboard.jsx ---
+// --- UPDATED FILE: frontend/src/DoctorDashboard.jsx ---
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
@@ -16,7 +16,6 @@ const parseDateAsLocal = (dateString) => {
     return new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
 };
 
-// This function groups appointments by status, and then by slot for active ones
 const groupAppointments = (appointments) => {
     const grouped = {
         pending: {},
@@ -43,15 +42,13 @@ function DoctorDashboard() {
     
     const [appointments, setAppointments] = useState([]);
     const [completedAppointments, setCompletedAppointments] = useState([]);
-    
-    // --- FIX: State now stores the full unavailability object {id, date} ---
     const [unavailability, setUnavailability] = useState([]);
-    
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
     const [treatmentModal, setTreatmentModal] = useState({ isOpen: false, appointment: null });
-    const [cancelModal, setCancelModal] = useState({ isOpen: false, appointment: null });
+    // --- UPDATED: State to handle both individual and bulk cancellation modals ---
+    const [cancelModal, setCancelModal] = useState({ isOpen: false, appointment: null, slotInfo: null });
 
     useEffect(() => {
         if (user) {
@@ -73,7 +70,6 @@ function DoctorDashboard() {
         ]).then(([activeRes, completedRes, unavailRes]) => {
             setAppointments(Array.isArray(activeRes.data) ? activeRes.data : []);
             setCompletedAppointments(Array.isArray(completedRes.data) ? completedRes.data : []);
-            // --- FIX: Store the full object, not just the date ---
             setUnavailability(Array.isArray(unavailRes.data) ? unavailRes.data : []);
         }).catch(() => {
             setError('Failed to fetch dashboard data.');
@@ -91,37 +87,26 @@ function DoctorDashboard() {
         } catch { alert('Failed to accept appointment.'); }
     };
     
-    const handleBulkCancel = async (slotKey) => {
-        const [date, slot] = slotKey.split('@');
-        if (window.confirm(`Are you sure you want to cancel ALL appointments for ${slot} on ${date}? This will notify all patients in the slot.`)) {
-            try {
-                await axios.post('/api/appointments/bulk-cancel/', { 
-                    appointment_date: date, 
-                    time_slot: slot,
-                    suggestion_message: `The doctor's slot at ${slot} on ${date} has been cancelled.`
-                });
-                alert('Slot cancelled successfully.');
-                fetchAllData();
-            } catch (err) {
-                alert(err.response?.data?.error || 'Failed to cancel the slot.');
-            }
-        }
+    // --- NEW: Functions to open the versatile cancel modal ---
+    const handleOpenSlotCancelModal = (slotKey) => {
+        const [date, timeSlot] = slotKey.split('@');
+        setCancelModal({ isOpen: true, slotInfo: { date, timeSlot } });
     };
     
-    // --- FIX: Corrected unavailability logic ---
+    const handleOpenIndividualCancelModal = (appointment) => {
+        setCancelModal({ isOpen: true, appointment: appointment });
+    };
+
     const handleUnavailabilityChange = async (clickedDate) => {
         const dateStr = format(startOfDay(clickedDate), 'yyyy-MM-dd');
         const existingRecord = unavailability.find(d => d.date === dateStr);
 
         try {
             if (existingRecord) {
-                // If the date exists, delete it
                 await axios.delete(`/api/doctor/unavailability/${existingRecord.id}/`);
             } else {
-                // If the date does not exist, add it
                 await axios.post('/api/doctor/unavailability/', { date: dateStr });
             }
-            // Refresh all data from the server to ensure UI consistency
             fetchAllData();
         } catch (err) {
             console.error("Unavailability update error:", err);
@@ -129,12 +114,10 @@ function DoctorDashboard() {
         }
     };
 
-    // Helper to pass an array of Date objects to the calendar for highlighting
     const unavailableDateObjects = useMemo(() => {
         return unavailability.map(d => parseDateAsLocal(d.date));
     }, [unavailability]);
 
-    // Function to style the calendar tiles
     const tileClassName = ({ date, view }) => {
         if (view === 'month' && unavailableDateObjects.some(d => isEqual(startOfDay(d), startOfDay(date)))) {
             return 'unavailable-tile';
@@ -152,7 +135,13 @@ function DoctorDashboard() {
             <style>{`.unavailable-tile { background-color: #ffcdd2 !important; border-radius: 50%; }`}</style>
             
             {treatmentModal.isOpen && <TreatmentFormModal appointment={treatmentModal.appointment} onClose={() => setTreatmentModal({ isOpen: false, appointment: null })} onSuccess={fetchAllData} />}
-            {cancelModal.isOpen && <CancelAppointmentModal appointment={cancelModal.appointment} onClose={() => setCancelModal({ isOpen: false, appointment: null })} onSuccess={fetchAllData} />}
+            {/* --- UPDATED: Render modal with the correct props --- */}
+            {cancelModal.isOpen && <CancelAppointmentModal 
+                appointment={cancelModal.appointment} 
+                slotInfo={cancelModal.slotInfo}
+                onClose={() => setCancelModal({ isOpen: false, appointment: null, slotInfo: null })} 
+                onSuccess={fetchAllData} 
+            />}
 
             <header style={styles.header}>
                 <h1>{user?.first_name} {user?.last_name} Hospital</h1>
@@ -166,7 +155,6 @@ function DoctorDashboard() {
             {error && <p style={{ color: 'red' }}>{error}</p>}
             
             <div style={styles.mainGrid}>
-                {/* APPOINTMENTS SECTION */}
                 <div style={styles.appointmentsColumn}>
                     <section>
                         <h2>Pending Appointment Requests</h2>
@@ -174,8 +162,11 @@ function DoctorDashboard() {
                             <div key={slotKey} style={styles.slotGroup}>
                                 <div style={styles.slotHeader}>
                                     <h4>{format(parseDateAsLocal(apts[0].appointment_date), 'EEE, MMM dd, yyyy')} at {apts[0].time_slot}</h4>
+                                    {/* --- MOVED: Cancel Slot button is now here --- */}
+                                    <button onClick={() => handleOpenSlotCancelModal(slotKey)} style={{...styles.button, ...styles.cancelButton}}>Cancel Slot</button>
                                 </div>
                                 <table style={styles.table}>
+                                    <thead><tr><th style={styles.th}>Patient</th><th style={styles.th}>Symptoms</th><th style={styles.th}>Action</th></tr></thead>
                                     <tbody>
                                         {apts.map(apt => (
                                             <tr key={apt.id}>
@@ -198,10 +189,10 @@ function DoctorDashboard() {
                             <div key={slotKey} style={styles.slotGroup}>
                                 <div style={styles.slotHeader}>
                                     <h4>{format(parseDateAsLocal(apts[0].appointment_date), 'EEE, MMM dd, yyyy')} at {apts[0].time_slot}</h4>
-                                    <button onClick={() => handleBulkCancel(slotKey)} style={{...styles.button, ...styles.cancelButton}}>Cancel Slot</button>
+                                    {/* This button was moved to the pending section per requirements */}
                                 </div>
                                 <table style={styles.table}>
-                                    <thead><tr><th style={styles.th}>Patient</th><th style={styles.th}>Symptoms</th><th style={styles.th}>Action</th></tr></thead>
+                                    <thead><tr><th style={styles.th}>Patient</th><th style={styles.th}>Symptoms</th><th style={styles.th}>Actions</th></tr></thead>
                                     <tbody>
                                         {apts.map(apt => (
                                             <tr key={apt.id} style={apt.is_emergency ? {backgroundColor: '#fff0f1'} : {}}>
@@ -210,7 +201,9 @@ function DoctorDashboard() {
                                                 </td>
                                                 <td style={styles.td}>{apt.patient?.patient_profile?.current_symptoms || 'N/A'}</td>
                                                 <td style={{...styles.td, textAlign: 'center'}}>
-                                                    <button onClick={() => handleOpenTreatmentModal(apt)} style={{...styles.button, ...styles.completeButton}}>Finalize & Prescribe</button>
+                                                    <button onClick={() => handleOpenTreatmentModal(apt)} style={{...styles.button, ...styles.completeButton}}>Finalize</button>
+                                                    {/* --- NEW: Individual cancel button for confirmed appointments --- */}
+                                                    <button onClick={() => handleOpenIndividualCancelModal(apt)} style={{...styles.button, ...styles.cancelButton, backgroundColor: '#6c757d'}}>Cancel</button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -221,7 +214,6 @@ function DoctorDashboard() {
                     </section>
                 </div>
 
-                {/* SIDEBAR SECTION */}
                 <div style={styles.sidebarColumn}>
                     <section>
                         <h2>Unavailability Dates</h2>
@@ -231,7 +223,7 @@ function DoctorDashboard() {
                             minDate={new Date()}
                             tileClassName={tileClassName}
                         />
-                        <p style={{fontSize: '0.8em', color: '#666', marginTop: '10px'}}>Click a date to mark it as unavailable. Click an unavailable date again to remove it.</p>
+                        <p style={{fontSize: '0.8em', color: '#666', marginTop: '10px'}}>Click a date to mark it as unavailable. Click again to remove the flag.</p>
                     </section>
                     
                     <section style={{marginTop: '40px'}}>
@@ -270,7 +262,7 @@ const styles = {
     thead: { backgroundColor: '#f8f9fa' },
     th: { border: '1px solid #ddd', padding: '12px', textAlign: 'left' },
     td: { border: '1px solid #ddd', padding: '10px', verticalAlign: 'middle' },
-    button: { border: 'none', padding: '6px 12px', borderRadius: '4px', color: 'white', cursor: 'pointer', marginRight: '5px'},
+    button: { border: 'none', padding: '6px 12px', borderRadius: '4px', color: 'white', cursor: 'pointer', marginRight: '5px', marginTop: '5px'},
     acceptButton: { backgroundColor: '#28a745' },
     cancelButton: { backgroundColor: '#ffc107', color: 'black' },
     completeButton: { backgroundColor: '#007bff' },

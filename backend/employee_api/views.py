@@ -1,4 +1,4 @@
-# --- UPDATED FILE: backend/employee_api/views.py ---
+# --- CORRECTED FILE: backend/employee_api/views.py ---
 
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
@@ -9,6 +9,7 @@ from django.contrib.auth import authenticate
 from django.db.models import Count, Q
 from django.db import transaction, IntegrityError
 from datetime import datetime
+from rest_framework import serializers # Added for handling validation errors
 
 import boto3
 import json
@@ -18,6 +19,7 @@ from .models import (
     CustomUser, PatientProfile, DoctorProfile, Appointment,
     MedicalRecord, DiagnosticTest, MedicationBill, DoctorUnavailability
 )
+# --- FIX: Removed the non-existent serializer from the import list ---
 from .serializers import (
     UserRegistrationSerializer, UserSerializer, LoginSerializer,
     PatientProfileSerializer, DoctorProfileSerializer, DoctorListSerializer,
@@ -26,7 +28,6 @@ from .serializers import (
 )
 from .permissions import IsDoctor, IsPatient
 
-# ... (RegisterView, LoginView, ProfileView, Patient/DoctorProfileView, DoctorListView remain unchanged) ...
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
@@ -92,7 +93,6 @@ class DoctorListView(generics.ListAPIView):
         if not category: return CustomUser.objects.none()
         return CustomUser.objects.filter(role='doctor', doctor_profile__specialization=category)
 
-# --- UPDATED AppointmentView ---
 class AppointmentView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -102,7 +102,6 @@ class AppointmentView(APIView):
         if user.role == 'patient':
             appointments = Appointment.objects.filter(patient=user).select_related('doctor', 'medical_record')
         elif user.role == 'doctor':
-            # Doctors now fetch all non-completed/non-cancelled appointments at once
             appointments = Appointment.objects.filter(
                 doctor=user
             ).exclude(
@@ -121,12 +120,11 @@ class AppointmentView(APIView):
         doctor_id = request.data.get('doctor_id')
         appointment_date = request.data.get('appointment_date')
         time_slot = request.data.get('time_slot')
-        is_emergency = request.data.get('is_emergency') == 'true' # FormData sends strings
+        is_emergency = request.data.get('is_emergency') == 'true'
 
         if not all([doctor_id, appointment_date, time_slot]):
             return Response({'error': 'Doctor, date, and time slot are required.'}, status=status.HTTP_400_BAD_REQUEST)
             
-        # Check if doctor is unavailable
         if DoctorUnavailability.objects.filter(doctor_id=doctor_id, date=appointment_date).exists():
             return Response({'error': 'The doctor is unavailable on this date.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -143,14 +141,13 @@ class AppointmentView(APIView):
         serializer = AppointmentSerializer(data=request.data, context={'request': request})
         try:
             serializer.is_valid(raise_exception=True)
-            serializer.save() # The logic for emergency/status is in the serializer
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except serializers.ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({'error': f'An unexpected server error occurred: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# --- UPDATED AppointmentAvailabilityView ---
 class AppointmentAvailabilityView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -161,7 +158,6 @@ class AppointmentAvailabilityView(APIView):
         if not doctor_id or not date_str:
             return Response({'error': 'Doctor ID and date are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check for doctor's unavailability first
         if DoctorUnavailability.objects.filter(doctor_id=doctor_id, date=date_str).exists():
             return Response({'unavailable': True, 'message': 'The doctor is unavailable on this date.'})
 
@@ -174,7 +170,6 @@ class AppointmentAvailabilityView(APIView):
         slot_counts = {slot['time_slot']: slot['count'] for slot in availability}
         return Response(slot_counts, status=status.HTTP_200_OK)
 
-# ... (ManageAppointmentView remains mostly the same for individual actions) ...
 class ManageAppointmentView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def patch(self, request, pk):
@@ -182,14 +177,20 @@ class ManageAppointmentView(APIView):
         except Appointment.DoesNotExist: return Response({'error': 'Appointment not found.'}, status=status.HTTP_404_NOT_FOUND)
         user = request.user
         action = request.data.get('action')
+        
         if user.role == 'doctor':
             if appointment.doctor != user: return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
             if action == 'accept':
                 if appointment.status != 'pending': return Response({'error': 'Can only accept pending appointments.'}, status=status.HTTP_400_BAD_REQUEST)
                 appointment.status = 'accepted'
                 appointment.save()
-            # The 'cancel' action is now handled by BulkCancel
+            elif action == 'cancel':
+                appointment.status = 'cancelled'
+                appointment.suggestion_message = request.data.get('suggestion_message', 'Cancelled by doctor.')
+                appointment.suggestion_date = request.data.get('suggestion_date', None)
+                appointment.save()
             else: return Response({'error': 'Invalid action.'}, status=status.HTTP_400_BAD_REQUEST)
+
         elif user.role == 'patient':
             if appointment.patient != user: return Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
             if action == 'cancel':
@@ -209,14 +210,14 @@ class ManageAppointmentView(APIView):
         appointment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-# --- NEW VIEW for Bulk Cancellation ---
 class BulkCancelAppointmentsView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
 
     def post(self, request):
         date = request.data.get('appointment_date')
         time_slot = request.data.get('time_slot')
-        message = request.data.get('suggestion_message', 'This time slot has been cancelled by the doctor due to an emergency.')
+        message = request.data.get('suggestion_message', 'This time slot has been cancelled by the doctor.')
+        suggestion_date = request.data.get('suggestion_date', None)
 
         if not date or not time_slot:
             return Response({'error': 'Date and time slot are required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -231,14 +232,14 @@ class BulkCancelAppointmentsView(APIView):
         if not appointments_to_cancel.exists():
             return Response({'message': 'No active appointments found for this slot.'}, status=status.HTTP_200_OK)
 
-        cancelled_count = appointments_to_cancel.update(status='cancelled', suggestion_message=message)
-        
-        # Here you would trigger notifications for each cancelled appointment
-        # For now, we just confirm the action
+        cancelled_count = appointments_to_cancel.update(
+            status='cancelled', 
+            suggestion_message=message,
+            suggestion_date=suggestion_date
+        )
         
         return Response({'message': f'{cancelled_count} appointments in this slot have been cancelled.'}, status=status.HTTP_200_OK)
 
-# --- NEW VIEWS for Doctor Unavailability ---
 class DoctorUnavailabilityView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     serializer_class = DoctorUnavailabilitySerializer
@@ -250,8 +251,6 @@ class DoctorUnavailabilityView(generics.ListCreateAPIView):
         try:
             serializer.save(doctor=self.request.user)
         except IntegrityError:
-            # This handles the case where the date already exists, preventing a crash.
-            # The frontend can use this to know the request was "successful" even if no new object was created.
             pass
 
 class DoctorUnavailabilityDeleteView(generics.DestroyAPIView):
@@ -261,31 +260,27 @@ class DoctorUnavailabilityDeleteView(generics.DestroyAPIView):
     def get_queryset(self):
         return self.queryset.filter(doctor=self.request.user)
 
-# --- UPDATED and NEW History Views ---
-class MedicalHistoryView(generics.ListAPIView): # Patient's history list
+class MedicalHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsPatient]
     serializer_class = AppointmentSerializer
     def get_queryset(self):
         return Appointment.objects.filter(patient=self.request.user, status='completed').select_related('doctor', 'medical_record', 'medication_bill').prefetch_related('diagnostic_tests').order_by('-appointment_date')
 
-class DoctorAppointmentHistoryView(generics.ListAPIView): # Doctor's history list
+class DoctorAppointmentHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     serializer_class = AppointmentSerializer
     def get_queryset(self):
         return Appointment.objects.filter(doctor=self.request.user, status='completed').select_related('patient', 'patient__patient_profile').order_by('-appointment_date')
 
-# --- NEW VIEW for Doctor's single history item ---
 class AppointmentHistoryDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
-    serializer_class = AppointmentSerializer
+    # --- FIX: Use the correct, existing serializer ---
+    serializer_class = AppointmentSerializer 
     queryset = Appointment.objects.filter(status='completed')
 
     def get_queryset(self):
-        # Ensure doctor can only access their own completed appointments
         return self.queryset.filter(doctor=self.request.user)
 
-
-# ... (CompleteAppointmentView, DoctorDiagnostic/Payments, PatientDiagnostic/Payments views remain unchanged) ...
 class CompleteAppointmentView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
     parser_classes = [MultiPartParser, FormParser]
