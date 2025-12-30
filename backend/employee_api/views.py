@@ -240,18 +240,32 @@ class BulkCancelAppointmentsView(APIView):
         
         return Response({'message': f'{cancelled_count} appointments in this slot have been cancelled.'}, status=status.HTTP_200_OK)
 
+# --- FIXED DoctorUnavailabilityView ---
+
 class DoctorUnavailabilityView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated, IsDoctor]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = DoctorUnavailabilitySerializer
 
     def get_queryset(self):
-        return DoctorUnavailability.objects.filter(doctor=self.request.user)
+        user = self.request.user
+
+        # Doctor sees their own unavailability
+        if user.role == 'doctor':
+            return DoctorUnavailability.objects.filter(doctor=user)
+
+        # Patient fetches unavailability of selected doctor
+        doctor_id = self.request.query_params.get('doctor_id')
+        if doctor_id:
+            return DoctorUnavailability.objects.filter(doctor_id=doctor_id)
+
+        return DoctorUnavailability.objects.none()
 
     def perform_create(self, serializer):
-        try:
-            serializer.save(doctor=self.request.user)
-        except IntegrityError:
-            pass
+        # Only doctors can create unavailability
+        if self.request.user.role != 'doctor':
+            raise PermissionDenied("Only doctors can set unavailability.")
+        serializer.save(doctor=self.request.user)
+
 
 class DoctorUnavailabilityDeleteView(generics.DestroyAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDoctor]
