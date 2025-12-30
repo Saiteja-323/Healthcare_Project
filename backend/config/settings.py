@@ -132,3 +132,15 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
+import os
+
+DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+
+ALLOWED_HOSTS = os.environ.get(
+    "DJANGO_ALLOWED_HOSTS", ""
+).split(",")
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.onrender.com",
+    "https://*.netlify.app",
+]
