@@ -138,10 +138,10 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = [
     "healthcare-project-2ob4.onrender.com",
-    ".onrender.com",
-    "localhost",
-    "127.0.0.1",
+    "healthcare-sai323.netlify.app",
+    ".netlify.app",
 ]
+
 
 CSRF_TRUSTED_ORIGINS = [
     "https://healthcare-project-2ob4.onrender.com",
