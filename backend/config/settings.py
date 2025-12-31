@@ -136,11 +136,15 @@ import os
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = os.environ.get(
-    "DJANGO_ALLOWED_HOSTS", ""
-).split(",")
+ALLOWED_HOSTS = [
+    "healthcare-project-2ob4.onrender.com",
+    ".onrender.com",
+    "localhost",
+    "127.0.0.1",
+]
 
 CSRF_TRUSTED_ORIGINS = [
+    "https://healthcare-project-2ob4.onrender.com",
     "https://*.onrender.com",
-    "https://*.netlify.app",
 ]
+
