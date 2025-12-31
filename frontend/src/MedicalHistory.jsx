@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import axios from 'axios';
+import api from './api/axios';
 
 const timingLabels = {
     mbe: 'Morning (Before Eat)', maf: 'Morning (After Eat)',
@@ -31,7 +31,7 @@ function MedicalHistory() {
     const fetchHistory = async () => {
         setLoading(true);
         try {
-            const response = await axios.get('/api/medical-history/');
+            const response = await api.get('/api/medical-history/');
             setHistory(Array.isArray(response.data) ? response.data : []);
         } catch (err) {
             setError('Failed to fetch medical history.');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from './api/axios';
 import { format } from 'date-fns';
 
 function CancelAppointmentModal({ appointment, slotInfo, onClose, onSuccess }) {
@@ -30,7 +30,7 @@ function CancelAppointmentModal({ appointment, slotInfo, onClose, onSuccess }) {
                 if (suggestionDate) {
                     payload.suggestion_date = suggestionDate;
                 }
-                await axios.post('/api/appointments/bulk-cancel/', payload);
+                await api.post('/api/appointments/bulk-cancel/', payload);
                 alert('Slot cancelled successfully. All patients in the slot have been notified.');
 
             } else {
@@ -42,7 +42,7 @@ function CancelAppointmentModal({ appointment, slotInfo, onClose, onSuccess }) {
                 if (suggestionDate) {
                     payload.suggestion_date = suggestionDate;
                 }
-                await axios.patch(`/api/appointments/${appointment.id}/manage/`, payload);
+                await api.patch(`/api/appointments/${appointment.id}/manage/`, payload);
                 alert('Appointment cancelled successfully.');
             }
             

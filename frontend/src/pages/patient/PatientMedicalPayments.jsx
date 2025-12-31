@@ -1,7 +1,7 @@
 // --- CORRECTED FILE: src/pages/patient/PatientMedicalPayments.jsx ---
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../../api/axios";
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -14,7 +14,7 @@ function PatientMedicalPayments() {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.get('/api/patient/medical-payments/');
+            const res = await api.get('/api/patient/medical-payments/');
             setBills(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
             console.error("Fetch Error:", err); // Log the error
@@ -31,7 +31,7 @@ function PatientMedicalPayments() {
     const handlePay = async (billId) => {
         if (!window.confirm('Proceed to payment? This is a simulation.')) return;
         try {
-            await axios.patch(`/api/patient/medical-payments/${billId}/pay/`);
+            await api.patch(`/api/patient/medical-payments/${billId}/pay/`);
             alert('Payment Successful! Your prescription is now available in Medical History.');
             fetchBills();
         } catch (err) {

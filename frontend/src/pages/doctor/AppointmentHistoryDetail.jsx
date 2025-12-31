@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from "../../api/axios";
 import { format } from 'date-fns';
 
 const timingLabels = {
@@ -27,7 +27,7 @@ function AppointmentHistoryDetail() {
         const fetchAppointmentDetails = async () => {
             setLoading(true);
             try {
-                const response = await axios.get(`/api/appointments/history/${appointmentId}/`);
+                const response = await api.get(`/api/appointments/history/${appointmentId}/`);
                 setAppointment(response.data);
             } catch (err) {
                 setError('Failed to fetch appointment details. You may not have permission to view this record.');

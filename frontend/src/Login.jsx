@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import axios from 'axios';
+import api from './api/axios';
+
 
 function Login() {
     const [formData, setFormData] = useState({ username: '', password: '', role: 'patient' });
@@ -26,7 +27,7 @@ function Login() {
         setError('');
         
         try {
-            const response = await axios.post('/api/login/', formData);
+            const response = await api.post('/api/login/', formData);
             await login(response.data.tokens, response.data.user);
             
             // --- REDIRECT LOGIC UPDATED HERE ---

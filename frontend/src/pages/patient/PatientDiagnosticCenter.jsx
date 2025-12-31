@@ -1,7 +1,7 @@
 // --- CORRECTED FILE: src/pages/patient/PatientDiagnosticCenter.jsx ---
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../../api/axios";
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -14,7 +14,7 @@ function PatientDiagnosticCenter() {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.get('/api/patient/diagnostic-center/');
+            const res = await api.get('/api/patient/diagnostic-center/');
             const data = Array.isArray(res.data) ? res.data : [];
 
             const grouped = data.reduce((acc, test) => {
@@ -44,7 +44,7 @@ function PatientDiagnosticCenter() {
     const handlePay = async (appointmentId) => {
         if (!window.confirm('Proceed to payment? This is a simulation.')) return;
         try {
-            await axios.post(`/api/patient/diagnostic-center/pay/${appointmentId}/`);
+            await api.post(`/api/patient/diagnostic-center/pay/${appointmentId}/`);
             alert('Payment Successful!');
             fetchTests();
         } catch (err) {

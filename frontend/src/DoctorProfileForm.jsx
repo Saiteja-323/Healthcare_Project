@@ -1,7 +1,7 @@
 // frontend/template_react/src/DoctorProfileForm.jsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from './api/axios';
 import { useAuth } from './AuthContext';
 
 const specializations = [
@@ -32,7 +32,7 @@ function DoctorProfileForm() {
         setLoading(true);
         setError('');
         try {
-            await axios.post('/api/profile/doctor/', formData);
+            await api.post('/api/profile/doctor/', formData);
             await fetchProfile(); // Refresh user data in context
             navigate('/doctor/dashboard');
         } catch (err) {

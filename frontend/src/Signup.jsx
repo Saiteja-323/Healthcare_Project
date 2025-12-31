@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import axios from 'axios';
+import api from './api/axios';
 
 function Signup() {
     const [formData, setFormData] = useState({
@@ -31,7 +31,7 @@ function Signup() {
         }
         
         try {
-            const response = await axios.post('/api/register/', formData);
+            const response = await api.post('/api/register/', formData);
             // On success, log the user in
             login(response.data.tokens, response.data.user);
             

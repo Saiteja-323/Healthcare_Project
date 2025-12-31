@@ -1,7 +1,7 @@
 // --- CORRECTED FILE: src/pages/doctor/MedicalPayments.jsx ---
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../../api/axios";
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -14,7 +14,7 @@ function MedicalPayments() {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.get('/api/doctor/medical-payments/');
+            const res = await api.get('/api/doctor/medical-payments/');
             const data = Array.isArray(res.data) ? res.data : [];
             const billsWithEditState = data.map(b => ({...b, editCost: b.total_cost || ''}));
             setBills(billsWithEditState);
@@ -40,7 +40,7 @@ function MedicalPayments() {
             return;
         }
         try {
-            await axios.patch(`/api/doctor/medical-payments/${bill.id}/manage/`, {
+            await api.patch(`/api/doctor/medical-payments/${bill.id}/manage/`, {
                 total_cost: bill.editCost,
                 send_to_patient: true,
             });

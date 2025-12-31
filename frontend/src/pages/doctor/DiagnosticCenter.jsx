@@ -1,7 +1,7 @@
 // --- CORRECTED FILE: src/pages/doctor/DiagnosticCenter.jsx ---
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from "../../api/axios";
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 
@@ -14,7 +14,7 @@ function DiagnosticCenter() {
         setLoading(true);
         setError('');
         try {
-            const res = await axios.get('/api/doctor/diagnostic-center/');
+            const res = await api.get('/api/doctor/diagnostic-center/');
             const data = Array.isArray(res.data) ? res.data : [];
             const testsWithEditState = data.map(t => ({...t, editCost: t.cost || '', editResult: t.result || ''}));
             setTests(testsWithEditState);
@@ -40,7 +40,7 @@ function DiagnosticCenter() {
             return;
         }
         try {
-            await axios.patch(`/api/doctor/diagnostic-center/${test.id}/manage/`, {
+            await api.patch(`/api/doctor/diagnostic-center/${test.id}/manage/`, {
                 cost: test.editCost,
                 result: test.editResult,
                 send_to_patient: true,

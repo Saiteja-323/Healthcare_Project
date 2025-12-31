@@ -1,7 +1,7 @@
 // --- CORRECTED & ENHANCED FILE: frontend/src/TreatmentFormModal.jsx ---
 
 import { useState } from 'react';
-import axios from 'axios';
+import api from './api/axios';
 
 const timingOptions = [
     { key: 'mbe', label: 'Morning (Before Eat)' }, { key: 'maf', label: 'Morning (After Eat)' },
@@ -133,7 +133,7 @@ function TreatmentFormModal({ appointment, onClose, onSuccess }) {
         }
         
         try {
-            await axios.post(`/api/appointments/${appointment.id}/complete/`, formData);
+            await api.post(`/api/appointments/${appointment.id}/complete/`, formData);
             alert('Treatment submitted successfully! Records sent for processing.');
             onSuccess(); // This refreshes the dashboard
             onClose();

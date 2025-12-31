@@ -1,7 +1,7 @@
 // --- CORRECTED FILE: frontend/src/AppointmentModal.jsx ---
 
 import { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import api from './api/axios';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { format, isEqual, startOfDay } from 'date-fns';
@@ -40,7 +40,7 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate, isE
     useEffect(() => {
         const fetchUnavailability = async () => {
             try {
-                const res = await axios.get(`/api/doctor/unavailability/?doctor_id=${doctor.id}`);
+                const res = await api.get(`/api/doctor/unavailability/?doctor_id=${doctor.id}`);
                 const dates = (Array.isArray(res.data) ? res.data : []).map(d => parseDateAsLocal(d.date));
                 setUnavailableDates(dates);
             } catch (err) {
@@ -63,7 +63,7 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate, isE
         setLoading(true); setError('');
         try {
             const formattedDate = format(date, 'yyyy-MM-dd');
-            const response = await axios.get(`/api/appointments/availability/?doctor_id=${doctor.id}&date=${formattedDate}`);
+            const response = await api.get(`/api/appointments/availability/?doctor_id=${doctor.id}&date=${formattedDate}`);
             
             if (response.data.unavailable) {
                 setError(response.data.message || 'The doctor is not available on this day.');
@@ -99,7 +99,7 @@ function AppointmentModal({ doctor, onClose, onSuccess, restrictedUntilDate, isE
         }
 
         try {
-            await axios.post('/api/appointments/', formData, {
+            await api.post('/api/appointments/', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             alert(`Appointment request sent successfully!`);

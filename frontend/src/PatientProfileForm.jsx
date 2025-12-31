@@ -1,7 +1,7 @@
 // frontend/template_react/src/PatientProfileForm.jsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from './api/axios';
 import { useAuth } from './AuthContext';
 
 const healthCategories = [
@@ -32,7 +32,7 @@ function PatientProfileForm() {
         setLoading(true);
         setError('');
         try {
-            await axios.post('/api/profile/patient/', formData);
+            await api.post('/api/profile/patient/', formData);
             await fetchProfile(); // Refresh user data in context
             navigate('/patient/dashboard');
         } catch (err) {

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from './api/axios';
 import { format } from 'date-fns';
 import AppointmentModal from './AppointmentModal';
 import PaymentModal from './PaymentModal'; // <-- NEW IMPORT
@@ -57,14 +57,14 @@ function PatientDashboard() {
     const fetchDoctors = async () => {
         setLoading(true); setError('');
         try {
-            const res = await axios.get(`/api/doctors/?category=${selectedCategory}`);
+            const res = await api.get(`/api/doctors/?category=${selectedCategory}`);
             setDoctors(res.data);
         } catch { setError('Failed to load doctors.'); } finally { setLoading(false); }
     };
 
     const fetchAppointments = async () => {
         try {
-            const res = await axios.get('/api/appointments/');
+            const res = await api.get('/api/appointments/');
             setAppointments(res.data);
             const restrictions = {};
             res.data.filter(apt => apt.status === 'cancelled' && apt.suggestion_date)
@@ -98,7 +98,7 @@ function PatientDashboard() {
     const handlePatientCancel = async (appointmentId) => {
         if (window.confirm('Are you sure you want to cancel this booked appointment? The doctor will be notified.')) {
             try {
-                await axios.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'cancel' });
+                await api.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'cancel' });
                 alert('Appointment cancelled successfully.');
                 fetchAppointments(); 
             } catch (err) { alert(err.response?.data?.error || 'Failed to cancel appointment.'); }
@@ -108,7 +108,7 @@ function PatientDashboard() {
     const handleDeleteRequest = async (appointmentId) => {
         if (window.confirm('Are you sure you want to withdraw this appointment request?')) {
             try {
-                await axios.delete(`/api/appointments/${appointmentId}/manage/`);
+                await api.delete(`/api/appointments/${appointmentId}/manage/`);
                 // --- UPDATED MESSAGE ---
                 alert('The money has been refunded.');
                 setAppointments(prev => prev.filter(apt => apt.id !== appointmentId));

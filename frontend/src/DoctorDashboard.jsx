@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from './api/axios';
 import { format, isEqual, startOfDay } from 'date-fns';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -64,9 +64,9 @@ function DoctorDashboard() {
         setLoading(true);
         setError('');
         Promise.all([
-            axios.get('/api/appointments/'),
-            axios.get('/api/appointments/history/'),
-            axios.get('/api/doctor/unavailability/')
+            api.get('/api/appointments/'),
+            api.get('/api/appointments/history/'),
+            api.get('/api/doctor/unavailability/')
         ]).then(([activeRes, completedRes, unavailRes]) => {
             setAppointments(Array.isArray(activeRes.data) ? activeRes.data : []);
             setCompletedAppointments(Array.isArray(completedRes.data) ? completedRes.data : []);
@@ -82,7 +82,7 @@ function DoctorDashboard() {
 
     const handleAccept = async (appointmentId) => {
         try {
-            await axios.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'accept' });
+            await api.patch(`/api/appointments/${appointmentId}/manage/`, { action: 'accept' });
             fetchAllData(); 
         } catch { alert('Failed to accept appointment.'); }
     };
@@ -103,9 +103,9 @@ function DoctorDashboard() {
 
         try {
             if (existingRecord) {
-                await axios.delete(`/api/doctor/unavailability/${existingRecord.id}/`);
+                await api.delete(`/api/doctor/unavailability/${existingRecord.id}/`);
             } else {
-                await axios.post('/api/doctor/unavailability/', { date: dateStr });
+                await api.post('/api/doctor/unavailability/', { date: dateStr });
             }
             fetchAllData();
         } catch (err) {

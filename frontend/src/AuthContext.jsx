@@ -1,7 +1,6 @@
 // src/AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import api from './api/axios';
 
 const AuthContext = createContext();
 
@@ -21,7 +20,7 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const token = localStorage.getItem('access_token');
         if (token) {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             fetchProfile();
         } else {
             setLoading(false);
@@ -31,7 +30,7 @@ export const AuthProvider = ({ children }) => {
     const fetchProfile = async () => {
         setLoading(true); // Ensure loading is true when fetching
         try {
-            const response = await axios.get('/api/profile/');
+            const response = await api.get('/api/profile/');
             setUser(response.data.user);
         } catch (error) {
             console.error('Failed to fetch profile:', error);
@@ -47,7 +46,7 @@ export const AuthProvider = ({ children }) => {
     const login = (tokens, userData) => {
         localStorage.setItem('access_token', tokens.access);
         localStorage.setItem('refresh_token', tokens.refresh);
-        axios.defaults.headers.common['Authorization'] = `Bearer ${tokens.access}`;
+        api.defaults.headers.common['Authorization'] = `Bearer ${tokens.access}`;
         setUser(userData);
         // Navigation should happen in the component calling login
     };
@@ -55,7 +54,7 @@ export const AuthProvider = ({ children }) => {
     const logoutAndClearState = () => {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        delete axios.defaults.headers.common['Authorization'];
+        delete api.defaults.headers.common['Authorization'];
         setUser(null);
         // Do not navigate here directly, as AuthProvider might not be within Router context
         // Navigation after logout should be handled by components or a redirect mechanism
