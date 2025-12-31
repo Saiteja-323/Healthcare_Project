@@ -34,47 +34,32 @@ from .permissions import IsDoctor, IsPatient
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
-    permission_classes = [AllowAny]
-    renderer_classes = [JSONRenderer]  # 🔴 IMPORTANT FIX
+    permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-
-        if not serializer.is_valid():
-            return Response(
-                {
-                    "error": "Validation failed",
-                    "details": serializer.errors
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+        serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # SNS notification (safe)
-        try:
-            message_payload = {
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name
-            }
-
-            sns_client = boto3.client(
-                "sns",
-                region_name=os.environ.get("AWS_REGION", "ap-south-1")
-            )
-
-            sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
-            if sns_topic_arn:
+        # OPTIONAL: Disable SNS in production unless fully configured
+        if os.environ.get("ENABLE_SNS") == "true":
+            try:
+                message_payload = {
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name
+                }
+                sns_client = boto3.client(
+                    "sns",
+                    region_name=os.environ.get("AWS_REGION")
+                )
                 sns_client.publish(
-                    TopicArn=sns_topic_arn,
+                    TopicArn=os.environ.get("SNS_TOPIC_ARN"),
                     Message=json.dumps(message_payload),
                     Subject="NewUserRegistration"
                 )
-
-        except Exception as e:
-            # DO NOT break registration if SNS fails
-            print("SNS publish failed:", e)
+            except Exception as e:
+                print("SNS ERROR:", e)
 
         refresh = RefreshToken.for_user(user)
 
@@ -82,16 +67,16 @@ class RegisterView(generics.CreateAPIView):
             {
                 "message": "User registered successfully",
                 "user": UserSerializer(
-                    user,
-                    context=self.get_serializer_context()
+                    user, context=self.get_serializer_context()
                 ).data,
                 "tokens": {
                     "refresh": str(refresh),
-                    "access": str(refresh.access_token)
-                }
+                    "access": str(refresh.access_token),
+                },
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
+
 
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
