@@ -10,6 +10,9 @@ from django.db.models import Count, Q
 from django.db import transaction, IntegrityError
 from datetime import datetime
 from rest_framework import serializers # Added for handling validation errors
+from rest_framework.renderers import JSONRenderer
+from rest_framework.permissions import AllowAny
+
 
 import boto3
 import json
@@ -31,21 +34,64 @@ from .permissions import IsDoctor, IsPatient
 class RegisterView(generics.CreateAPIView):
     queryset = CustomUser.objects.all()
     serializer_class = UserRegistrationSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny]
+    renderer_classes = [JSONRenderer]  # 🔴 IMPORTANT FIX
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "error": "Validation failed",
+                    "details": serializer.errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         user = serializer.save()
+
+        # SNS notification (safe)
         try:
-            message_payload = {"email": user.email, "first_name": user.first_name, "last_name": user.last_name}
-            sns_client = boto3.client('sns', region_name=os.environ.get('AWS_REGION', 'ap-south-1'))
-            sns_topic_arn = os.environ.get('SNS_TOPIC_ARN')
+            message_payload = {
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name
+            }
+
+            sns_client = boto3.client(
+                "sns",
+                region_name=os.environ.get("AWS_REGION", "ap-south-1")
+            )
+
+            sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
             if sns_topic_arn:
-                sns_client.publish(TopicArn=sns_topic_arn, Message=json.dumps(message_payload), Subject='NewUserRegistration')
+                sns_client.publish(
+                    TopicArn=sns_topic_arn,
+                    Message=json.dumps(message_payload),
+                    Subject="NewUserRegistration"
+                )
+
         except Exception as e:
-            print(f"CRITICAL: Failed to publish new user notification to SNS. Error: {e}")
+            # DO NOT break registration if SNS fails
+            print("SNS publish failed:", e)
+
         refresh = RefreshToken.for_user(user)
-        return Response({'message': 'User registered successfully', 'user': UserSerializer(user, context=self.get_serializer_context()).data, 'tokens': {'refresh': str(refresh), 'access': str(refresh.access_token)}}, status=status.HTTP_201_CREATED)
+
+        return Response(
+            {
+                "message": "User registered successfully",
+                "user": UserSerializer(
+                    user,
+                    context=self.get_serializer_context()
+                ).data,
+                "tokens": {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token)
+                }
+            },
+            status=status.HTTP_201_CREATED
+        )
 
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
