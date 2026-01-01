@@ -49,6 +49,12 @@ function App() {
             path="/patient/payments"
             element={<ProtectedRoute role="patient"><PatientMedicalPayments /></ProtectedRoute>}
           />
+          <Route
+            path="/patient/complete-profile"
+            element={<ProtectedRoute role="patient"> <PatientProfileForm /></ProtectedRoute>
+  }
+/>
+
 
           {/* Doctor */}
           <Route

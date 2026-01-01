@@ -1,128 +1,195 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from './AuthContext';
-import api from './api/axios';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import api from "./api/axios";
 
 function Signup() {
-    const [formData, setFormData] = useState({
-        username: '', email: '', password: '', password_confirm: '',
-        first_name: '', last_name: '', role: 'patient'
+  const navigate = useNavigate();
+
+  const [formData, setFormData] = useState({
+    username: "",
+    email: "",
+    first_name: "",
+    last_name: "",
+    password: "",
+    password_confirm: "",
+    role: "patient",
+  });
+
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
     });
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
-    const { login } = useAuth();
+    setError("");
+  };
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-        setError('');
-    };
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    // --- REPLACE YOUR ENTIRE HANDLESUBMIT FUNCTION WITH THIS ---
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
+    try {
+      await api.post("/api/register/", formData);
+      alert("Registration successful. Please login.");
+      navigate("/login");
+    } catch (err) {
+      console.log(err.response?.data);
 
-        if (formData.password !== formData.password_confirm) {
-            setError("Passwords don't match.");
-            setLoading(false);
-            return;
-        }
-        
-        try {
-            const response = await api.post('/api/register/', formData);
-            // On success, log the user in
-            login(response.data.tokens, response.data.user);
-            
-            // And redirect to the correct profile completion page
-            if (response.data.user.role === 'doctor') {
-                navigate('/doctor/complete-profile', { replace: true });
-            } else {
-                navigate('/patient/complete-profile', { replace: true });
-            }
-        } catch (err) {
-            // THIS IS THE CORRECTED ERROR HANDLING LOGIC
-            if (err.response && err.response.data) {
-                const errors = err.response.data;
-                const errorMessages = [];
-                // Loop through the error object from Django
-                for (const key in errors) {
-                    // Format it nicely, e.g., "username: This username is already taken."
-                    const message = `${key}: ${Array.isArray(errors[key]) ? errors[key].join(' ') : errors[key]}`;
-                    errorMessages.push(message);
-                }
-                // Join all messages into a single string
-                setError(errorMessages.join(' '));
-            } else {
-                // Fallback for network errors or other issues
-                setError('Registration failed. Please try again or check your connection.');
-            }
-            console.error("Signup error details:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
+      if (err.response?.data) {
+        const data = err.response.data;
+        const firstError =
+          typeof data === "string"
+            ? data
+            : Object.values(data).flat()[0];
+        setError(firstError);
+      } else {
+        setError("Registration failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-        <div style={{ maxWidth: '450px', margin: '50px auto', padding: '30px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <h2 style={{ textAlign: 'center' }}>Register New Account</h2>
-            {/* The whiteSpace property helps display multi-line errors cleanly */}
-            {error && <p style={{ color: 'red', textAlign: 'center', whiteSpace: 'pre-wrap' }}>{error}</p>}
-            
-            <form onSubmit={handleSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                    <div>
-                        <label htmlFor="username">Username*:</label>
-                        <input id="username" name="username" placeholder="Username" value={formData.username} onChange={handleChange} required 
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }} />
-                    </div>
-                    <div>
-                        <label htmlFor="email">Email*:</label>
-                        <input id="email" name="email" type="email" placeholder="Email" value={formData.email} onChange={handleChange} required 
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }} />
-                    </div>
-                    <div>
-                        <label htmlFor="password">Password*:</label>
-                        <input id="password" name="password" type="password" placeholder="Password" value={formData.password} onChange={handleChange} required 
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }} />
-                    </div>
-                    <div>
-                        <label htmlFor="password_confirm">Confirm Password*:</label>
-                        <input id="password_confirm" name="password_confirm" type="password" placeholder="Confirm Password" value={formData.password_confirm} onChange={handleChange} required 
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }} />
-                    </div>
-                    <div>
-                        <label htmlFor="first_name">First Name:</label>
-                        <input id="first_name" name="first_name" placeholder="First Name" value={formData.first_name} onChange={handleChange} 
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }} />
-                    </div>
-                    <div>
-                        <label htmlFor="last_name">Last Name:</label>
-                        <input id="last_name" name="last_name" placeholder="Last Name" value={formData.last_name} onChange={handleChange} 
-                            style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }} />
-                    </div>
-                </div>
+  return (
+    <div style={styles.container}>
+      <div style={styles.card}>
+        <h2 style={styles.title}>Register</h2>
 
-                <div style={{ marginTop: '15px', marginBottom: '20px' }}>
-                    <label htmlFor="role">Register as*:</label>
-                    <select id="role" name="role" value={formData.role} onChange={handleChange} required
-                        style={{ width: '100%', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px' }}>
-                        <option value="patient">Patient</option>
-                        <option value="doctor">Doctor</option>
-                    </select>
-                </div>
-                
-                <button type="submit" disabled={loading} style={{ width: '100%', padding: '12px', backgroundColor: loading ? '#aaa' : '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>
-                    {loading ? 'Registering...' : 'Register'}
-                </button>
-            </form>
-            
-            <p style={{ textAlign: 'center', marginTop: '20px' }}>
-                Already have an account? <Link to="/login">Login here</Link>
-            </p>
-        </div>
-    );
+        {error && <p style={styles.error}>{error}</p>}
+
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            name="username"
+            placeholder="Username"
+            value={formData.username}
+            onChange={handleChange}
+            required
+            style={styles.input}
+          />
+
+          <input
+            type="email"
+            name="email"
+            placeholder="Email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            style={styles.input}
+          />
+
+          <input
+            type="text"
+            name="first_name"
+            placeholder="First Name"
+            value={formData.first_name}
+            onChange={handleChange}
+            required
+            style={styles.input}
+          />
+
+          <input
+            type="text"
+            name="last_name"
+            placeholder="Last Name"
+            value={formData.last_name}
+            onChange={handleChange}
+            required
+            style={styles.input}
+          />
+
+          <input
+            type="password"
+            name="password"
+            placeholder="Password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            style={styles.input}
+          />
+
+          <input
+            type="password"
+            name="password_confirm"
+            placeholder="Confirm Password"
+            value={formData.password_confirm}
+            onChange={handleChange}
+            required
+            style={styles.input}
+          />
+
+          <select
+            name="role"
+            value={formData.role}
+            onChange={handleChange}
+            style={styles.input}
+          >
+            <option value="patient">Patient</option>
+            <option value="doctor">Doctor</option>
+          </select>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={styles.button}
+          >
+            {loading ? "Registering..." : "Register"}
+          </button>
+        </form>
+
+        <p style={{ marginTop: "15px" }}>
+          Already have an account?{" "}
+          <Link to="/login">Login</Link>
+        </p>
+      </div>
+    </div>
+  );
 }
+
+const styles = {
+  container: {
+    minHeight: "100vh",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    background: "#f5f7fa",
+  },
+  card: {
+    background: "white",
+    padding: "40px",
+    borderRadius: "10px",
+    width: "350px",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.1)",
+  },
+  title: {
+    textAlign: "center",
+    marginBottom: "20px",
+  },
+  input: {
+    width: "100%",
+    padding: "10px",
+    marginBottom: "12px",
+    borderRadius: "5px",
+    border: "1px solid #ccc",
+  },
+  button: {
+    width: "100%",
+    padding: "12px",
+    backgroundColor: "#007bff",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    fontWeight: "bold",
+    cursor: "pointer",
+  },
+  error: {
+    color: "red",
+    textAlign: "center",
+    marginBottom: "10px",
+  },
+};
 
 export default Signup;

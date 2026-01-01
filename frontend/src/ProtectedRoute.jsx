@@ -1,30 +1,20 @@
-// src/ProtectedRoute.jsx
-import { useAuth } from './AuthContext';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from "react-router-dom";
+import { useAuth } from "./AuthContext";
 
-const ProtectedRoute = ({ children, requiredRole }) => {
-    const { user, loading } = useAuth();
-    const location = useLocation();
+function ProtectedRoute({ children, role }) {
+  const { user, loading } = useAuth();
 
-    if (loading) {
-        return <div>Loading authentication state...</div>; // Or a spinner component
-    }
+  if (loading) return <p>Loading...</p>;
 
-    if (!user) {
-        // Redirect them to the /login page, but save the current location they were
-        // trying to go to so we can send them along after they login.
-        return <Navigate to="/login" state={{ from: location }} replace />;
-    }
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-    if (requiredRole && user.role !== requiredRole) {
-        // User is logged in but doesn't have the required role.
-        // Redirect to home or an "unauthorized" page.
-        // Consider if admin should access employee routes or vice-versa.
-        // For now, strictly enforce the role.
-        return <Navigate to="/" state={{ from: location }} replace />; 
-    }
+  if (role && user.role !== role) {
+    return <Navigate to="/" replace />;
+  }
 
-    return children;
-};
+  return children;
+}
 
 export default ProtectedRoute;

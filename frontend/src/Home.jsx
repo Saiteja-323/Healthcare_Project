@@ -8,12 +8,7 @@ function Home() {
 
     useEffect(() => {
         if (!loading && user) {
-            if (user.role === 'doctor' && user.doctor_profile) {
-                navigate('/doctor/dashboard', { replace: true });
-            } else if (user.role === 'patient' && user.patient_profile) {
-                navigate('/patient/dashboard', { replace: true });
-            }
-            else if (user.role === 'doctor') {
+            if (user.role === 'doctor') {
                 navigate('/doctor/dashboard', { replace: true });
             } else if (user.role === 'patient') {
                 navigate('/patient/dashboard', { replace: true });
@@ -21,7 +16,8 @@ function Home() {
         }
     }, [user, loading, navigate]);
 
-    if (loading || user) {
+    // Show loading ONLY while auth is loading
+    if (loading) {
         return (
             <div style={styles.container}>
                 <h1 style={styles.title}>Loading Your Experience...</h1>
@@ -29,18 +25,32 @@ function Home() {
             </div>
         );
     }
-    
+
+    // If user exists, redirect effect will handle it (render nothing)
+    if (user) return null;
+
     return (
         <div style={styles.container}>
             <div style={styles.card}>
                 <h1 style={styles.title}>Welcome to Health Management System</h1>
-                <p style={styles.subtitle}>Your trusted partner in digital healthcare. Connect with specialists, manage your appointments, and keep track of your medical history, all in one place.</p>
+                <p style={styles.subtitle}>
+                    Your trusted partner in digital healthcare. Connect with specialists,
+                    manage your appointments, and keep track of your medical history —
+                    all in one place.
+                </p>
+
                 <div style={styles.buttonContainer}>
                     <Link to="/login" style={{ textDecoration: 'none' }}>
-                        <button style={{ ...styles.button, ...styles.loginButton }}>Login</button>
+                        <button style={{ ...styles.button, ...styles.loginButton }}>
+                            Login
+                        </button>
                     </Link>
-                    <Link to="/register" style={{ textDecoration: 'none' }}>
-                        <button style={{ ...styles.button, ...styles.registerButton }}>Register</button>
+
+                    {/* ✅ FIXED ROUTE */}
+                    <Link to="/signup" style={{ textDecoration: 'none' }}>
+                        <button style={{ ...styles.button, ...styles.registerButton }}>
+                            Register
+                        </button>
                     </Link>
                 </div>
             </div>
@@ -105,7 +115,7 @@ const styles = {
         height: '36px',
         borderRadius: '50%',
         borderLeftColor: '#007bff',
-        animation: 'spin 1s ease infinite',
+        animation: 'spin 1s linear infinite',
         marginTop: '20px',
     },
 };
