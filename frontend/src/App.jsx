@@ -18,7 +18,6 @@ import DiagnosticCenter from "./pages/doctor/DiagnosticCenter";
 import MedicalPayments from "./pages/doctor/MedicalPayments";
 import AppointmentHistoryDetail from "./pages/doctor/AppointmentHistoryDetail";
 
-
 import PatientDiagnosticCenter from "./pages/patient/PatientDiagnosticCenter";
 import PatientMedicalPayments from "./pages/patient/PatientMedicalPayments";
 
@@ -27,90 +26,121 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+
+          {/* PUBLIC */}
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
-          {/* Patient */}
+          {/* PATIENT ROUTES */}
           <Route
             path="/patient/dashboard"
-            element={<ProtectedRoute role="patient"><PatientDashboard /></ProtectedRoute>}
+            element={
+              <ProtectedRoute role="patient">
+                <PatientDashboard />
+              </ProtectedRoute>
+            }
           />
+
           <Route
             path="/patient/profile"
-            element={<ProtectedRoute role="patient"><PatientProfileForm /></ProtectedRoute>}
+            element={
+              <ProtectedRoute role="patient">
+                <PatientProfileForm />
+              </ProtectedRoute>
+            }
           />
-          <Route
-            path="/patient/history"
-            element={<ProtectedRoute role="patient"><MedicalHistory /></ProtectedRoute>}
-          />
-          <Route
-            path="/patient/diagnostic-reports"
-            element={<ProtectedRoute role="patient"><PatientDiagnosticCenter /></ProtectedRoute>}
-          />
-          <Route
-            path="/patient/medication-bills"
-            element={<ProtectedRoute role="patient"><PatientMedicalPayments /></ProtectedRoute>}
-          />
+
           <Route
             path="/patient/complete-profile"
-            element={<ProtectedRoute role="patient"> <PatientProfileForm /></ProtectedRoute>
-  }
-/>
+            element={
+              <ProtectedRoute role="patient">
+                <PatientProfileForm />
+              </ProtectedRoute>
+            }
+          />
 
+          <Route
+            path="/patient/history"
+            element={
+              <ProtectedRoute role="patient">
+                <MedicalHistory />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Doctor */}
-          {/* Doctor */}
-                <Route
-                      path="/doctor/dashboard"
-                      element={<ProtectedRoute role="doctor"><DoctorDashboard /></ProtectedRoute>}
-                />
+          <Route
+            path="/patient/tests"
+            element={
+              <ProtectedRoute role="patient">
+                <PatientDiagnosticCenter />
+              </ProtectedRoute>
+            }
+          />
 
-                <Route
-                      path="/doctor/profile"
-                      element={<ProtectedRoute role="doctor"><DoctorProfileForm /></ProtectedRoute>}
-                />
+          <Route
+            path="/patient/medication-bills"
+            element={
+              <ProtectedRoute role="patient">
+                <PatientMedicalPayments />
+              </ProtectedRoute>
+            }
+          />
 
-                <Route
-                      path="/doctor/complete-profile"
-                      element={<ProtectedRoute role="doctor"><DoctorProfileForm /></ProtectedRoute>}
-                  />
+          {/* DOCTOR ROUTES */}
+          <Route
+            path="/doctor/dashboard"
+            element={
+              <ProtectedRoute role="doctor">
+                <DoctorDashboard />
+              </ProtectedRoute>
+            }
+          />
 
-                <Route
-                        path="/doctor/tests"
-                        element={<ProtectedRoute role="doctor"><DiagnosticCenter /></ProtectedRoute>}
-                />
+          <Route
+            path="/doctor/profile"
+            element={
+              <ProtectedRoute role="doctor">
+                <DoctorProfileForm />
+              </ProtectedRoute>
+            }
+          />
 
-                <Route
-                      path="/doctor/payments"
-                      element={<ProtectedRoute role="doctor"><MedicalPayments /></ProtectedRoute>}
-                />
-                <Route
-  path="/doctor/history/:id"
-  element={
-    <ProtectedRoute role="doctor">
-      <AppointmentHistoryDetail />
-    </ProtectedRoute>
-  }
-/>
+          <Route
+            path="/doctor/complete-profile"
+            element={
+              <ProtectedRoute role="doctor">
+                <DoctorProfileForm />
+              </ProtectedRoute>
+            }
+          />
 
-<Route
-  path="/doctor/diagnostic-center"
-  element={
-    <ProtectedRoute role="doctor">
-      <DiagnosticCenter />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/doctor/medical-payments"
-  element={
-    <ProtectedRoute role="doctor">
-      <MedicalPayments />
-    </ProtectedRoute>
-  }
-/>
+          <Route
+            path="/doctor/history/:id"
+            element={
+              <ProtectedRoute role="doctor">
+                <AppointmentHistoryDetail />
+              </ProtectedRoute>
+            }
+          />
 
+          <Route
+            path="/doctor/diagnostic-center"
+            element={
+              <ProtectedRoute role="doctor">
+                <DiagnosticCenter />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/doctor/medical-payments"
+            element={
+              <ProtectedRoute role="doctor">
+                <MedicalPayments />
+              </ProtectedRoute>
+            }
+          />
 
         </Routes>
       </BrowserRouter>
