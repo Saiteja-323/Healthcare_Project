@@ -16,6 +16,7 @@ db.sqlite3
 
 # CRITICAL: Ignore the virtual environment
 /backend/venv/
+node_modules/
 
 # CRITICAL: Ignore environment variables file
 /backend/.env
