@@ -1,6 +1,6 @@
 [build]
   base = "frontend"
-  command = "npm rebuild esbuild && npm run build"
+  command = "npm ci --unsafe-perm && npm run build"
   publish = "dist"
 
 [build.environment]
